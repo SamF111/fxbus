@@ -1,0 +1,26 @@
+/**
+ * FX Bus
+ * Minimal styling namespace.
+ *
+ * Scope:
+ * - Dialogs and UI elements created by FX Bus macros.
+ * - Intentionally lightweight to avoid theme conflicts.
+ */
+
+.fxbus-dialog {
+  font-size: 0.9rem;
+}
+
+.fxbus-dialog .form-group {
+  margin-bottom: 0.5rem;
+}
+
+.fxbus-dialog label {
+  font-weight: 500;
+}
+
+.fxbus-dialog hr {
+  margin: 0.75rem 0;
+  border: none;
+  border-top: 1px solid var(--color-border-light-1);
+}

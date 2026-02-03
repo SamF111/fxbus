@@ -1,0 +1,24 @@
+{
+  "id": "fxbus",
+  "title": "FX Bus",
+  "description": "GM-broadcast, client-side visual effects framework. Provides a single socket-based FX listener that renders visual-only effects locally on each client using PIXI and canvas.app.ticker. No document mutation. Deterministic start-stop behaviour.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "mintchoc"
+    }
+  ],
+  "minimumCoreVersion": "12",
+  "compatibleCoreVersion": "12",
+  "esmodules": [
+    "scripts/fxbus.js"
+  ],
+  "styles": [
+    "styles/fxbus.css"
+  ],
+  "socket": true,
+  "url": "",
+  "manifest": "",
+  "download": "",
+  "license": "LICENSE"
+}
