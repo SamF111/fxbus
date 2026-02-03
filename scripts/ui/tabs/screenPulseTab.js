@@ -2,7 +2,7 @@
  * FX Bus - Screen Pulse Tab
  */
 
-import { num, normaliseHex, setDisabled, syncColourPair } from "../shared/panelUtils.js";
+import { num, normaliseHex, setDisabled, syncColourPair } from "./shared/panelUtils.js";
 
 export function screenPulseTabDef() {
   return {

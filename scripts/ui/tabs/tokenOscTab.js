@@ -2,7 +2,7 @@
  * FX Bus - Token Oscillation Tab
  */
 
-import { num, selectedTokenIds } from "../shared/panelUtils.js";
+import { num, selectedTokenIds } from "./shared/panelUtils.js";
 
 export function tokenOscTabDef() {
   return {

@@ -2,7 +2,7 @@
  * FX Bus - Screen Shake Tab
  */
 
-import { num, setDisabled } from "../shared/panelUtils.js";
+import { num, setDisabled } from "./shared/panelUtils.js";
 
 export function screenShakeTabDef() {
   return {

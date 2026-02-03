@@ -2,7 +2,7 @@
  * FX Bus - Screen Vignette Tab
  */
 
-import { num, normaliseHex, setDisabled, syncColourPair } from "../shared/panelUtils.js";
+import { num, normaliseHex, setDisabled, syncColourPair } from "./shared/panelUtils.js";
 
 export function screenVignetteTabDef() {
   return {

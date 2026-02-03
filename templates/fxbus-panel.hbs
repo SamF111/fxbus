@@ -1,0 +1,162 @@
+<form class="fxbus-panel" data-fxbus-root="1">
+  <style>
+    .fxbus-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .fxbus-tab-btn {
+      border: 1px solid var(--color-border-light-primary);
+      border-radius: 10px;
+      padding: 6px 10px;
+      cursor: pointer;
+      background: var(--color-bg-option);
+      user-select: none;
+      font-weight: 650;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .fxbus-tab-btn.is-active {
+      background: var(--color-bg-button);
+      border-color: var(--color-border-highlight);
+    }
+
+    .fxbus-tab-reset {
+      font-weight: 700;
+    }
+
+    .fxbus-tab-sep {
+      display: inline-flex;
+      align-items: center;
+      margin: 0 4px;
+      opacity: 0.5;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .fxbus-tabs-divider {
+      border: none;
+      border-top: 1px solid var(--color-border-light-primary);
+      margin: 6px 0 10px 0;
+    }
+
+    .fxbus-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .fxbus-inline {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .fxbus-muted {
+      opacity: 0.8;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .fxbus-divider {
+      margin: 10px 0;
+    }
+
+    .fxbus-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+
+    .fxbus-row button {
+      min-width: 120px;
+    }
+
+    .fxbus-smallbtn {
+      min-width: 90px !important;
+    }
+
+    .fxbus-panel .form-group {
+      margin: 6px 0;
+    }
+
+    .fxbus-panel label {
+      font-weight: 600;
+    }
+
+    .fxbus-panel input[type="number"],
+    .fxbus-panel input[type="text"],
+    .fxbus-panel input[type="color"],
+    .fxbus-panel select {
+      width: 100%;
+    }
+
+    .fxbus-panel-section {
+      padding-top: 4px;
+    }
+  </style>
+
+  <nav class="fxbus-tabs" aria-label="FX Bus tabs">
+    {{#each tabs}}
+      <button
+        type="button"
+        class="fxbus-tab-btn {{#if (eq this.id ../activeTab)}}is-active{{/if}}"
+        data-tab="{{this.id}}"
+        data-action="fxbusSelectTab"
+      >
+        {{this.label}}
+      </button>
+    {{/each}}
+
+    <span class="fxbus-tab-sep" aria-hidden="true">|</span>
+
+    <button
+      type="button"
+      class="fxbus-tab-btn fxbus-tab-reset"
+      data-tab="reset"
+      data-action="fxbusSelectTab"
+    >
+      Reset
+    </button>
+  </nav>
+
+  <hr class="fxbus-tabs-divider">
+
+  {{#each panels}}
+    <section
+      class="fxbus-panel-section"
+      data-panel="{{this.id}}"
+      data-fxbus-panel="1"
+    >
+      {{{this.html}}}
+    </section>
+  {{/each}}
+
+  <section
+    class="fxbus-panel-section"
+    data-panel="reset"
+    data-fxbus-panel="1"
+  >
+    <p class="fxbus-muted">
+      Global reset immediately stops all FX and restores transforms.
+    </p>
+
+    <div class="fxbus-row">
+      <button
+        type="button"
+        style="min-width:160px;"
+        data-action="fxbusDoReset"
+      >
+        Execute Reset
+      </button>
+    </div>
+  </section>
+</form>

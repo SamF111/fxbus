@@ -27,15 +27,46 @@ function getOrCreateRuntime() {
     screenFx: new Map(),
     handlers: new Map(),
 
-    emit(payload) {
-      const action = payload?.action;
-      if (typeof action !== "string") return;
+	emit(payload) {
+	  const action = payload?.action;
+	  if (typeof action !== "string") return;
 
-      const handler = runtime.handlers.get(action);
-      if (typeof handler === "function") handler(payload);
+	  const t0 = performance.now();
 
-      game.socket.emit(runtime.socketName, payload);
-    }
+	  // Log outgoing intent (GM-side control surface)
+	  try {
+		console.log("[FX Bus] emit", {
+		  action,
+		  payload: { ...payload },
+		  socket: runtime.socketName
+		});
+	  } catch {
+		console.log("[FX Bus] emit", action);
+	  }
+
+	  // Local apply
+	  const handler = runtime.handlers.get(action);
+	  if (typeof handler === "function") {
+		try {
+		  handler(payload);
+		  const dt = Math.round((performance.now() - t0) * 1000) / 1000;
+		  console.log("[FX Bus] handled", { action, ms: dt });
+		} catch (err) {
+		  console.error("[FX Bus] handler error", { action, err });
+		}
+	  } else {
+		console.warn("[FX Bus] no handler", { action });
+	  }
+
+	  // Broadcast to other clients
+	  try {
+		game.socket.emit(runtime.socketName, payload);
+		console.log("[FX Bus] broadcast", { action });
+	  } catch (err) {
+		console.error("[FX Bus] socket emit failed", { action, err });
+	  }
+	}
+
   };
 
   globalThis[RUNTIME_KEY] = runtime;
