@@ -1,20 +1,16 @@
 /**
- * FX Bus (Foundry VTT v12+)
+ * FX Bus (Foundry VTT v12+ / v13)
  * Client-side listener entrypoint.
  *
- * Responsibilities:
- * - Ensure a single global runtime instance exists on every client.
- * - Register the FX socket listener on ready.
- * - Register built-in effect handlers (oscillation + screen shake).
- * - Provide a single emit surface that applies locally then broadcasts.
- *
- * Constraints:
- * - Visual-only. No document updates. No token persistence.
- * - Effects must snapshot and restore render transforms exactly.
+ * Guarantees:
+ * - globalThis.fxbus exists from init.
+ * - globalThis.fxbus.emit exists from init.
+ * - UI state is persisted per-client.
  */
 
 import { registerFxSocket } from "./socket.js";
 import { registerBuiltInEffects } from "./effects/index.js";
+import { registerFxBusSceneControls } from "./ui/controls.js";
 
 const RUNTIME_KEY = "fxbus";
 
@@ -23,28 +19,22 @@ function getOrCreateRuntime() {
 
   const runtime = {
     id: "fxbus",
-    version: "0.1.0",
+    version: "0.2.0",
     socketName: "module.fxbus",
 
-    tickers: new Map(),  // Map(effectName -> tickerFn)
-    tokenFx: new Map(),  // Map(effectName -> Map(tokenId -> state))
-    screenFx: new Map(), // Map(effectName -> state)
+    tickers: new Map(),
+    tokenFx: new Map(),
+    screenFx: new Map(),
+    handlers: new Map(),
 
-    handlers: new Map(), // Map(action -> (payload) => void)
-
-    /**
-     * Emit an FX message:
-     * - Apply locally (emitter does not receive its own socket broadcast).
-     * - Broadcast to all other connected clients.
-     *
-     * @param {object} payload
-     */
     emit(payload) {
       const action = payload?.action;
-      const handler = this.handlers.get(action);
+      if (typeof action !== "string") return;
+
+      const handler = runtime.handlers.get(action);
       if (typeof handler === "function") handler(payload);
 
-      game.socket.emit(this.socketName, payload);
+      game.socket.emit(runtime.socketName, payload);
     }
   };
 
@@ -52,9 +42,30 @@ function getOrCreateRuntime() {
   return runtime;
 }
 
+/* -------------------------------------------- */
+/* INIT                                         */
+/* -------------------------------------------- */
+
 Hooks.once("init", () => {
+  // Ensure runtime exists immediately
   getOrCreateRuntime();
+
+  // Register per-client UI persistence
+  game.settings.register("fxbus", "uiState", {
+    name: "FX Bus UI State",
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {}
+  });
+
+  // Register left-toolbar controls
+  registerFxBusSceneControls();
 });
+
+/* -------------------------------------------- */
+/* READY                                        */
+/* -------------------------------------------- */
 
 Hooks.once("ready", () => {
   const runtime = getOrCreateRuntime();
@@ -62,5 +73,7 @@ Hooks.once("ready", () => {
   registerBuiltInEffects(runtime);
   registerFxSocket(runtime);
 
-  console.log(`[FX Bus] Ready. Socket: ${runtime.socketName}. Handlers: ${runtime.handlers.size}.`);
+  console.log(
+    `[FX Bus] Ready | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`
+  );
 });

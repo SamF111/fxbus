@@ -5,12 +5,25 @@
  * - Immediately stop all FX.
  * - Restore all token and stage transforms.
  * - Remove all active tickers.
+ * - Remove any FX overlay display objects stored on runtime.
  *
  * Action:
  * - fx.bus.reset
  */
 
 import { restoreTokenTransform, restoreStage } from "../utils.js";
+
+function safeDestroyDisplayObject(obj) {
+  if (!obj) return;
+  try {
+    if (obj.parent) obj.parent.removeChild(obj);
+  } catch (_) {}
+  try {
+    const tex = obj.texture ?? null;
+    obj.destroy?.({ children: true });
+    try { tex?.destroy?.(true); } catch (_) {}
+  } catch (_) {}
+}
 
 export function registerFxBusResetFx(runtime) {
   if (!runtime?.handlers) throw new Error("[FX Bus] fxbusResetFx: invalid runtime.");
@@ -30,7 +43,7 @@ export function registerFxBusResetFx(runtime) {
     }
     runtime.tokenFx.clear();
 
-    // Restore all screen FX and clear state
+    // Restore stage for any screen FX states which captured it
     for (const state of runtime.screenFx.values()) {
       if (state?.base) {
         try {
@@ -39,6 +52,13 @@ export function registerFxBusResetFx(runtime) {
       }
     }
     runtime.screenFx.clear();
+
+    // Remove any known overlay objects stored on runtime
+    safeDestroyDisplayObject(runtime.__screenPulseOverlay);
+    runtime.__screenPulseOverlay = null;
+
+    safeDestroyDisplayObject(runtime.__screenVignetteSprite);
+    runtime.__screenVignetteSprite = null;
 
     // Remove all tickers
     for (const tickerFn of runtime.tickers.values()) {
