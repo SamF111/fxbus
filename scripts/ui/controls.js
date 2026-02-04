@@ -7,12 +7,13 @@
  * - One hard reset button: immediately resets all FX
  *
  * Robustness:
- * - Supports both hook payload shapes seen in the wild:
+ * - Supports both hook payload shapes:
  *   A) Array of controls (canonical)
  *   B) Object map of controls (legacy / module-interference)
  *
- * Tools:
- * - Use onChange (v13+). Avoid onClick.
+ * Foundry v13:
+ * - Tools use onChange (not onClick)
+ * - Prefer layer: "token" (v13 key)
  */
 
 import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
@@ -20,7 +21,7 @@ import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
 export function registerFxBusSceneControls() {
   Hooks.on("getSceneControlButtons", (controls) => {
     if (!game.user.isGM) return;
-    if (!controls || (typeof controls !== "object")) return;
+    if (!controls || typeof controls !== "object") return;
 
     function clearActiveToolSoon() {
       queueMicrotask(() => {
@@ -48,7 +49,7 @@ export function registerFxBusSceneControls() {
       name: "fxbus",
       title: "FX Bus",
       icon: "fas fa-bolt",
-      layer: "TokenLayer",
+      layer: "token",
       visible: true,
       tools: [
         {
@@ -124,6 +125,42 @@ export function registerFxBusSceneControls() {
           }
         },
         {
+          name: "fxbus-blur",
+          title: "Screen Blur",
+          icon: "fas fa-eye-slash",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("blur");
+          }
+        },
+        {
+          name: "fxbus-smear",
+          title: "Screen Smear",
+          icon: "fas fa-water",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("smear");
+          }
+        },
+        {
+          name: "fxbus-streak",
+          title: "Screen Streak",
+          icon: "fas fa-wind",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("streak");
+          }
+        },
+        {
           name: "fxbus-reset",
           title: "Reset All FX",
           icon: "fas fa-ban",
@@ -138,7 +175,7 @@ export function registerFxBusSceneControls() {
       ]
     };
 
-    // A) Canonical v13: Array of controls
+    // A) Canonical: Array of controls
     if (Array.isArray(controls)) {
       if (controls.some((c) => c?.name === "fxbus")) return;
       controls.push(fxbusControlAsArrayShape);
@@ -149,12 +186,11 @@ export function registerFxBusSceneControls() {
     // B) Legacy / altered: object map of controls
     if (controls.fxbus) return;
 
-    // For object-shape controls, Foundry expects tools as an object map.
     controls.fxbus = {
       name: "fxbus",
       title: "FX Bus",
       icon: "fas fa-bolt",
-      layer: "TokenLayer",
+      layer: "token",
       visible: true,
       tools: {
         "fxbus-osc": {
@@ -227,6 +263,42 @@ export function registerFxBusSceneControls() {
           onChange: (_event, active) => {
             if (!active) return;
             openTab("noise");
+          }
+        },
+        "fxbus-blur": {
+          name: "fxbus-blur",
+          title: "Screen Blur",
+          icon: "fas fa-eye-slash",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("blur");
+          }
+        },
+        "fxbus-smear": {
+          name: "fxbus-smear",
+          title: "Screen Smear",
+          icon: "fas fa-water",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("smear");
+          }
+        },
+        "fxbus-streak": {
+          name: "fxbus-streak",
+          title: "Screen Streak",
+          icon: "fas fa-wind",
+          button: true,
+          visible: true,
+          toggle: false,
+          onChange: (_event, active) => {
+            if (!active) return;
+            openTab("streak");
           }
         },
         "fxbus-reset": {

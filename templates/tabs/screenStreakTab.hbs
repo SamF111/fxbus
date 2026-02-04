@@ -1,0 +1,73 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenStreakTab.hbs --}}
+
+<div class="fxbus-tab" data-fxbus-tab="streak">
+  <p class="fxbus-muted">Directional motion trail using temporal feedback.</p>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Strength</label>
+      <input type="number" name="strength" step="0.01" min="0" max="1" value="0.6" />
+    </div>
+
+    <div class="form-group">
+      <label>Persistence</label>
+      <input type="number" name="persistence" step="0.01" min="0" max="0.999" value="0.9" />
+    </div>
+
+    <div class="form-group">
+      <label>Length (px)</label>
+      <input type="number" name="lengthPx" step="1" min="0" max="2000" value="60" />
+    </div>
+
+    <div class="form-group">
+      <label>Angle (deg)</label>
+      <input type="number" name="angleDeg" step="1" value="0" />
+    </div>
+
+    <div class="form-group">
+      <label>Jitter (px)</label>
+      <input type="number" name="jitterPx" step="1" min="0" max="200" value="0" />
+    </div>
+
+    <div class="form-group">
+      <label>Pulse (Hz)</label>
+      <input type="number" name="freqHz" step="0.1" min="0" max="60" value="0" />
+    </div>
+
+    <div class="form-group">
+      <label>Ease</label>
+      <select name="ease">
+        <option value="inOut" selected>inOut</option>
+        <option value="in">in</option>
+        <option value="out">out</option>
+        <option value="linear">linear</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="fxbus-inline">
+        <input type="checkbox" name="runUntilStopped" checked />
+        Run until stopped
+      </label>
+      <p class="fxbus-muted">When enabled, duration is ignored and the effect runs until Stop or Reset.</p>
+    </div>
+
+    <div class="form-group">
+      <label>Duration (ms)</label>
+      <input type="number" name="durationMs" step="50" min="0" max="600000" value="1200" />
+    </div>
+
+    <div class="form-group">
+      <label>Ramp in (ms, max 1000)</label>
+      <input type="number" name="rampMs" step="10" min="0" max="1000" value="250" />
+      <p class="fxbus-muted">Used only when Run until stopped is enabled.</p>
+    </div>
+  </div>
+
+  <hr class="fxbus-divider" />
+
+  <div class="fxbus-row">
+    <button type="button" data-action="start">Start / Update</button>
+    <button type="button" data-action="stop" class="fxbus-smallbtn">Stop</button>
+  </div>
+</div>

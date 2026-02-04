@@ -1,21 +1,19 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\ui\fxbusPanelApp.js
+
 /**
  * FX Bus - GM Control Panel App (Foundry v13+)
+ * Option A: tab HTML is Handlebars partials inside fxbus-panel.hbs
  *
- * Purpose:
- * - Provide a stable GM control panel using ApplicationV2 + HandlebarsApplicationMixin.
- * - Avoid Dialog/DialogV2 (V1) deprecation warnings.
- * - Reliable tab switching via AppV2 actions (data-action).
- * - Persist last-used values per-client via game.settings.
+ * Manual tab controller (no TabsUx).
  *
- * Requirements:
- * - Template file exists at: modules/fxbus/templates/fxbus-panel.hbs
- * - Each tab module exports a *TabDef() that returns:
- *     {
- *       id: string,
- *       label: string,
- *       contentHtml(): string,
- *       wire(root: HTMLElement, runtime: object): void
- *     }
+ * Reopen fix:
+ * - Foundry destroys DOM on close; next render gets a new DOM.
+ * - Re-bind tab handlers on every render.
+ * - Use AbortController to prevent stacked listeners across re-renders.
+ *
+ * Notes:
+ * - Ensure TAB_PARTIALS includes any new tab templates so partials are resolvable.
+ * - Ensure buildTabs() includes the matching tabDef so wiring occurs.
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
@@ -24,11 +22,48 @@ import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
 import { screenVignetteTabDef } from "./tabs/screenVignetteTab.js";
 import { screenChromAbTabDef } from "./tabs/screenChromAbTab.js";
 import { screenNoiseTabDef } from "./tabs/screenNoiseTab.js";
+import { screenBlurTabDef } from "./tabs/screenBlurTab.js";
+import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
+import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
 
 const MODULE_ID = "fxbus";
 const UI_STATE_KEY = "uiState";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const { loadTemplates, getTemplate } = foundry.applications.handlebars;
+
+const TAB_PARTIALS = [
+  `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenVignetteTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenChromAbTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenNoiseTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenBlurTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenSmearTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenStreakTab.hbs`
+];
+
+let TEMPLATES_PRELOADED = false;
+
+function templatePathToPartialName(path) {
+  const file = String(path).split("/").pop() ?? "";
+  return file.replace(/\.hbs$/i, "");
+}
+
+async function preloadFxBusTemplates() {
+  if (TEMPLATES_PRELOADED) return;
+
+  await loadTemplates(TAB_PARTIALS);
+
+  for (const path of TAB_PARTIALS) {
+    const partialName = templatePathToPartialName(path);
+    const templateFn = await getTemplate(path);
+    Handlebars.registerPartial(partialName, templateFn);
+  }
+
+  TEMPLATES_PRELOADED = true;
+}
 
 function buildTabs() {
   return [
@@ -37,14 +72,14 @@ function buildTabs() {
     screenPulseTabDef(),
     screenVignetteTabDef(),
     screenChromAbTabDef(),
-    screenNoiseTabDef()
+    screenNoiseTabDef(),
+    screenBlurTabDef(),
+    screenSmearTabDef(),
+    screenStreakTabDef()
   ];
 }
 
 function readState() {
-  /** Large comment:
-   * Read per-client UI state. Never throw.
-   */
   try {
     return game.settings.get(MODULE_ID, UI_STATE_KEY) ?? {};
   } catch (err) {
@@ -54,9 +89,6 @@ function readState() {
 }
 
 async function writeState(patch) {
-  /** Large comment:
-   * Patch-merge UI state and persist it. Never throw.
-   */
   try {
     const current = readState();
     const next = { ...current, ...patch };
@@ -67,9 +99,6 @@ async function writeState(patch) {
 }
 
 function applyStateToForm(root, state) {
-  /** Large comment:
-   * Rehydrate form inputs from uiState.
-   */
   for (const [name, value] of Object.entries(state ?? {})) {
     const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
     if (!el) continue;
@@ -89,9 +118,6 @@ function applyStateToForm(root, state) {
 }
 
 function captureStateFromForm(root) {
-  /** Large comment:
-   * Snapshot all [name] fields so reopen uses last values.
-   */
   const elements = Array.from(root.querySelectorAll("[name]"));
   const state = {};
 
@@ -117,9 +143,6 @@ function captureStateFromForm(root) {
 }
 
 function wireStatePersistence(root) {
-  /** Large comment:
-   * Debounced persistence on edits.
-   */
   let timer = null;
 
   const scheduleSave = () => {
@@ -134,29 +157,71 @@ function wireStatePersistence(root) {
   root.addEventListener("change", scheduleSave, true);
 }
 
+/**
+ * Manual tab controller - toggles both nav and content.
+ * Visibility is ultimately enforced by CSS (tab.active), but we also set display
+ * to be robust against theme variance.
+ */
+function setActiveTab(root, tabId) {
+  const navItems = Array.from(
+    root.querySelectorAll(".tabs[data-group='fxbus'] .item[data-tab]")
+  );
+  const panels = Array.from(
+    root.querySelectorAll(".tab[data-group='fxbus'][data-tab]")
+  );
+
+  for (const a of navItems) {
+    const isActive = a.dataset.tab === tabId;
+    a.classList.toggle("active", isActive);
+    a.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+
+  for (const s of panels) {
+    const isActive = s.dataset.tab === tabId;
+    s.classList.toggle("active", isActive);
+    s.style.display = isActive ? "" : "none";
+  }
+}
+
+/**
+ * Bind tab clicks to the current DOM root.
+ * AbortController prevents stacking listeners across re-renders.
+ */
+function wireTabClicks(app, root, abortSignal) {
+  const nav = root.querySelector(".tabs[data-group='fxbus']");
+  if (!nav) return;
+
+  nav.addEventListener(
+    "click",
+    async (event) => {
+      const a = event.target?.closest?.(".item[data-tab]");
+      if (!a) return;
+
+      event.preventDefault();
+
+      const tabId = String(a.dataset.tab ?? "");
+      if (!tabId) return;
+
+      app._activeTab = tabId;
+      setActiveTab(root, tabId);
+      await writeState({ __activeTab: tabId });
+    },
+    { capture: true, signal: abortSignal }
+  );
+}
+
 class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "fxbus-gm-control-panel",
     tag: "div",
     classes: ["fxbus-panel-app"],
-    window: {
-      title: "FX Bus - GM Control Panel",
-      resizable: true
-    },
-    position: {
-      width: 560,
-      height: "auto"
-    },
-    actions: {
-      fxbusSelectTab: FxBusGmControlPanelApp._actionSelectTab,
-      fxbusDoReset: FxBusGmControlPanelApp._actionDoReset
-    }
+    window: { title: "FX Bus - GM Control Panel", resizable: true },
+    position: { width: 560, height: "auto" },
+    actions: { fxbusDoReset: FxBusGmControlPanelApp._actionDoReset }
   };
 
   static PARTS = {
-    body: {
-      template: `modules/${MODULE_ID}/templates/fxbus-panel.hbs`
-    }
+    body: { template: `modules/${MODULE_ID}/templates/fxbus-panel.hbs` }
   };
 
   constructor(options = {}) {
@@ -164,41 +229,37 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     this._tabs = buildTabs();
     this._state = {};
     this._activeTab = "osc";
-    this._requestedStartTab = typeof options?.startTab === "string" ? options.startTab : null;
+    this._requestedStartTab =
+      typeof options?.startTab === "string" ? options.startTab : null;
+
+    this._tabAbort = null;
   }
 
   setRequestedStartTab(tabId) {
-    /** Large comment:
-     * Store a one-shot requested tab for the next render.
-     * Do not mutate ApplicationV2 options (effectively read-only in v13).
-     */
-    this._requestedStartTab = typeof tabId === "string" && tabId.length ? tabId : null;
+    this._requestedStartTab =
+      typeof tabId === "string" && tabId.length ? tabId : null;
   }
 
   async _prepareContext(_options) {
-    /** Large comment:
-     * Provide template data (tabs + html fragments).
-     */
+    await preloadFxBusTemplates();
+
     this._state = readState();
 
     const requestedTab = this._requestedStartTab;
-    const rememberedTab = typeof this._state.__activeTab === "string" ? this._state.__activeTab : null;
+    const rememberedTab =
+      typeof this._state.__activeTab === "string" ? this._state.__activeTab : null;
     const fallbackTab = this._tabs[0]?.id ?? "osc";
     this._activeTab = requestedTab ?? rememberedTab ?? fallbackTab;
 
-    // One-shot consume.
     this._requestedStartTab = null;
 
     return {
       tabs: this._tabs.map((t) => ({ id: t.id, label: t.label })),
-      panels: this._tabs.map((t) => ({ id: t.id, html: t.contentHtml() }))
+      activeTab: this._activeTab
     };
   }
 
   _onRender(_context, _options) {
-    /** Large comment:
-     * Post-render DOM wiring.
-     */
     const runtime = globalThis.fxbus;
     const root = this.element?.querySelector?.("form.fxbus-panel");
     if (!root) return;
@@ -214,43 +275,30 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     wireStatePersistence(root);
-    this._applyTabVisibility(root, this._activeTab);
+
+    setActiveTab(root, this._activeTab);
+
+    try {
+      this._tabAbort?.abort?.();
+    } catch {
+      // ignore
+    }
+    this._tabAbort = new AbortController();
+    wireTabClicks(this, root, this._tabAbort.signal);
   }
 
-  _applyTabVisibility(root, tabId) {
-    /** Large comment:
-     * Deterministic tab switching using inline display.
-     */
-    const buttons = Array.from(root.querySelectorAll(".fxbus-tab-btn"));
-    for (const b of buttons) b.classList.toggle("is-active", b.dataset.tab === tabId);
-
-    const panels = Array.from(root.querySelectorAll('.fxbus-panel-section[data-fxbus-panel="1"]'));
-    for (const p of panels) p.style.display = p.dataset.panel === tabId ? "" : "none";
-  }
-
-  static async _actionSelectTab(event, target) {
-    /** Large comment:
-     * AppV2 action: tab click.
-     */
-    event.preventDefault();
-
-    const tabId = target?.dataset?.tab;
-    if (typeof tabId !== "string" || tabId.length === 0) return;
-
-    this._activeTab = tabId;
-
-    const root = this.element?.querySelector?.("form.fxbus-panel");
-    if (root) this._applyTabVisibility(root, tabId);
-
-    await writeState({ __activeTab: tabId });
+  async _onClose(_options) {
+    try {
+      this._tabAbort?.abort?.();
+    } catch {
+      // ignore
+    }
+    this._tabAbort = null;
+    return super._onClose(_options);
   }
 
   static _actionDoReset(event, _target) {
-    /** Large comment:
-     * AppV2 action: global reset.
-     */
     event.preventDefault();
-
     const runtime = globalThis.fxbus;
     if (!runtime?.emit) return;
     runtime.emit({ action: "fx.bus.reset" });
@@ -268,7 +316,9 @@ export async function openFxBusGmControlPanel(options = {}) {
     return;
   }
 
-  if (!panelSingleton) panelSingleton = new FxBusGmControlPanelApp({ startTab: options.startTab });
+  if (!panelSingleton) {
+    panelSingleton = new FxBusGmControlPanelApp({ startTab: options.startTab });
+  }
   panelSingleton.setRequestedStartTab(options.startTab);
 
   await panelSingleton.render(true);

@@ -1,5 +1,7 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\effects\screenShakeFx.js
+
 /**
- * FX Bus - Screen Shake FX (Foundry VTT v12+)
+ * FX Bus - Screen Shake FX (Foundry v13+)
  *
  * Purpose:
  * - Apply a camera shake by offsetting the PIXI stage position (x/y).
@@ -17,7 +19,7 @@
  * - freqHz: number (default 24)        - shake frequency in Hz
  *
  * Behaviour:
- * - Uses deterministic oscillation, not RNG.
+ * - Deterministic oscillation (no RNG).
  * - Quadratic ease-out over duration for finite shakes.
  * - For indefinite shakes (durationMs = 0), amplitude is constant (no envelope).
  * - Auto-restores original stage position on completion or stop.
@@ -39,12 +41,12 @@ export function registerScreenShakeFx(runtime) {
 }
 
 function normaliseParams(msg) {
-  const intensityRaw = Number.isFinite(msg.intensityPx) ? msg.intensityPx : 12;
+  const intensityRaw = Number.isFinite(msg?.intensityPx) ? msg.intensityPx : 12;
 
-  const durationMsRaw = Number.isFinite(msg.durationMs) ? msg.durationMs : 600;
+  const durationMsRaw = Number.isFinite(msg?.durationMs) ? msg.durationMs : 600;
   const durationMs = durationMsRaw === 0 ? 0 : clamp(durationMsRaw, 1, 60000);
 
-  const freqHzRaw = Number.isFinite(msg.freqHz) ? msg.freqHz : 24;
+  const freqHzRaw = Number.isFinite(msg?.freqHz) ? msg.freqHz : 24;
 
   // Safety: sustained shake should be subtle.
   const intensityCap = durationMs === 0 ? 6 : 500;
@@ -69,7 +71,7 @@ function clearState(runtime) {
 }
 
 function onStart(runtime, msg) {
-  const params = normaliseParams(msg);
+  const params = normaliseParams(msg ?? {});
 
   // Capture base stage once, unless already shaking.
   const existing = getState(runtime);

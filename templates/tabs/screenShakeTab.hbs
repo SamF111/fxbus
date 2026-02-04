@@ -1,0 +1,57 @@
+<p class="fxbus-muted">
+  Duration = 0 runs until stopped.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="shakeUntilStopped"/>
+    Run until stopped
+  </label>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Duration (ms)</label>
+    <input
+      type="number"
+      name="shakeDurationMs"
+      value="600"
+      step="50"
+      min="1"
+      max="60000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Frequency (Hz)</label>
+    <input
+      type="number"
+      name="shakeFreqHz"
+      value="24"
+      step="1"
+      min="0.1"
+      max="120"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Intensity (px)</label>
+  <input
+    type="number"
+    name="shakeIntensityPx"
+    value="12"
+    step="1"
+    min="0"
+    max="500"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="shakeApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="shakeStop">Stop</button>
+</div>

@@ -6,67 +6,76 @@
  * - globalThis.fxbus exists from init.
  * - globalThis.fxbus.emit exists from init.
  * - UI state is persisted per-client.
+ *
+ * Toolbar injection:
+ * - getSceneControlButtons fires during UI controls construction.
+ * - Register the hook by setup at the latest (init is also fine).
+ * - Force a controls re-render on ready so the bolt appears without a full reload.
  */
 
 import { registerFxSocket } from "./socket.js";
 import { registerBuiltInEffects } from "./effects/index.js";
 import { registerFxBusSceneControls } from "./ui/controls.js";
 
+const MODULE_ID = "fxbus";
 const RUNTIME_KEY = "fxbus";
+const SOCKET_NAME = "module.fxbus";
 
 function getOrCreateRuntime() {
+  /** Large comment:
+   * Create the shared runtime once and expose it at globalThis.fxbus.
+   * emit() always:
+   * - applies locally if a handler exists
+   * - broadcasts to other clients via game.socket
+   */
   if (globalThis[RUNTIME_KEY]) return globalThis[RUNTIME_KEY];
 
   const runtime = {
-    id: "fxbus",
-    version: "0.2.0",
-    socketName: "module.fxbus",
+    id: MODULE_ID,
+    version: "0.5.0",
+    socketName: SOCKET_NAME,
 
     tickers: new Map(),
     tokenFx: new Map(),
     screenFx: new Map(),
     handlers: new Map(),
 
-	emit(payload) {
-	  const action = payload?.action;
-	  if (typeof action !== "string") return;
+    emit(payload) {
+      const action = payload?.action;
+      if (typeof action !== "string") return;
 
-	  const t0 = performance.now();
+      const t0 = performance.now();
 
-	  // Log outgoing intent (GM-side control surface)
-	  try {
-		console.log("[FX Bus] emit", {
-		  action,
-		  payload: { ...payload },
-		  socket: runtime.socketName
-		});
-	  } catch {
-		console.log("[FX Bus] emit", action);
-	  }
+      try {
+        console.log("[FX Bus] emit", {
+          action,
+          payload: { ...payload },
+          socket: runtime.socketName
+        });
+      } catch {
+        console.log("[FX Bus] emit", action);
+      }
 
-	  // Local apply
-	  const handler = runtime.handlers.get(action);
-	  if (typeof handler === "function") {
-		try {
-		  handler(payload);
-		  const dt = Math.round((performance.now() - t0) * 1000) / 1000;
-		  console.log("[FX Bus] handled", { action, ms: dt });
-		} catch (err) {
-		  console.error("[FX Bus] handler error", { action, err });
-		}
-	  } else {
-		console.warn("[FX Bus] no handler", { action });
-	  }
+      const handler = runtime.handlers.get(action);
+      if (typeof handler === "function") {
+        try {
+          handler(payload);
+          const dt = Math.round((performance.now() - t0) * 1000) / 1000;
+          console.log("[FX Bus] handled", { action, ms: dt });
+        } catch (err) {
+          console.error("[FX Bus] handler error", { action, err });
+        }
+      } else {
+        console.warn("[FX Bus] no handler", { action });
+      }
 
-	  // Broadcast to other clients
-	  try {
-		game.socket.emit(runtime.socketName, payload);
-		console.log("[FX Bus] broadcast", { action });
-	  } catch (err) {
-		console.error("[FX Bus] socket emit failed", { action, err });
-	  }
-	}
-
+      try {
+        game.socket.emit(runtime.socketName, payload);
+        console.log("[FX Bus] broadcast", { action });
+      } catch (err) {
+        console.error("[FX Bus] socket emit failed", { action, err });
+      }
+    }
   };
 
   globalThis[RUNTIME_KEY] = runtime;
@@ -78,11 +87,9 @@ function getOrCreateRuntime() {
 /* -------------------------------------------- */
 
 Hooks.once("init", () => {
-  // Ensure runtime exists immediately
   getOrCreateRuntime();
 
-  // Register per-client UI persistence
-  game.settings.register("fxbus", "uiState", {
+  game.settings.register(MODULE_ID, "uiState", {
     name: "FX Bus UI State",
     scope: "client",
     config: false,
@@ -90,7 +97,7 @@ Hooks.once("init", () => {
     default: {}
   });
 
-  // Register left-toolbar controls
+  // Safe to register here; also fine in setup.
   registerFxBusSceneControls();
 });
 
@@ -103,6 +110,13 @@ Hooks.once("ready", () => {
 
   registerBuiltInEffects(runtime);
   registerFxSocket(runtime);
+
+  // Ensure the left-toolbar picks up our injected control group immediately.
+  try {
+    ui.controls.render(true);
+  } catch {
+    // ignore
+  }
 
   console.log(
     `[FX Bus] Ready | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`

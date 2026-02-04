@@ -1,0 +1,122 @@
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Colour</label>
+    <div class="fxbus-inline">
+      <input type="color" name="pulseColourPicker" value="#ff0000"/>
+      <input type="text" name="pulseColour" value="#ff0000" placeholder="#rrggbb"/>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Blend</label>
+    <select name="pulseBlendMode">
+      <option value="SCREEN" selected>Screen</option>
+      <option value="ADD">Add</option>
+      <option value="MULTIPLY">Multiply</option>
+      <option value="OVERLAY">Overlay</option>
+      <option value="NORMAL">Normal</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Shape</label>
+    <select name="pulseShape">
+      <option value="sine" selected>Sine</option>
+      <option value="triangle">Triangle</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Envelope</label>
+    <select name="pulseEase">
+      <option value="inOut" selected>In-out</option>
+      <option value="in">In</option>
+      <option value="out">Out</option>
+      <option value="linear">Linear</option>
+    </select>
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="pulseUntilStopped"/>
+    Run until stopped
+  </label>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Duration (ms)</label>
+    <input
+      type="number"
+      name="pulseDurationMs"
+      value="1500"
+      step="50"
+      min="1"
+      max="60000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Frequency (Hz)</label>
+    <input
+      type="number"
+      name="pulseFreqHz"
+      value="2"
+      step="0.1"
+      min="0.1"
+      max="30"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Min alpha</label>
+    <input
+      type="number"
+      name="pulseMinAlpha"
+      value="0"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Max alpha</label>
+    <input
+      type="number"
+      name="pulseMaxAlpha"
+      value="0.35"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Intensity</label>
+  <input
+    type="number"
+    name="pulseIntensity"
+    value="1.0"
+    step="0.05"
+    min="0"
+    max="5"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" data-action="pulseStart">Start</button>
+  <button type="button" data-action="pulseStop" class="fxbus-smallbtn">Stop</button>
+</div>
+
+<p class="fxbus-muted">
+  Start broadcasts to all clients. Stop ends the effect on all clients.
+</p>

@@ -1,0 +1,144 @@
+<!-- modules/fxbus/templates/tabs/screenSmearTab.hbs -->
+
+<p class="fxbus-muted">
+  Screen-space motion smear / trailing ghost effect. Duration = 0 runs until stopped.
+</p>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="smearUntilStopped" checked />
+    Run until stopped
+  </label>
+</div>
+
+<div class="form-group">
+  <label>Duration (ms)</label>
+  <input
+    type="number"
+    name="smearDurationMs"
+    value="900"
+    step="50"
+    min="0"
+    max="600000"
+  />
+</div>
+
+<hr class="fxbus-divider" />
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Strength (0–1)</label>
+    <input
+      type="number"
+      name="smearStrength"
+      value="0.55"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Persistence (0–1)</label>
+    <input
+      type="number"
+      name="smearPersistence"
+      value="0.85"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Pulse freq (Hz)</label>
+    <input
+      type="number"
+      name="smearFreqHz"
+      value="0"
+      step="0.1"
+      min="0"
+      max="30"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Envelope</label>
+    <select name="smearEase">
+      <option value="inOut" selected>In-out</option>
+      <option value="in">In</option>
+      <option value="out">Out</option>
+      <option value="linear">Linear</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Min strength</label>
+    <input
+      type="number"
+      name="smearMinStrength"
+      value="0"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Max strength</label>
+    <input
+      type="number"
+      name="smearMaxStrength"
+      value="0.55"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Jitter (px)</label>
+    <input
+      type="number"
+      name="smearJitterPx"
+      value="0"
+      step="0.5"
+      min="0"
+      max="20"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Max step (px)</label>
+    <input
+      type="number"
+      name="smearMaxStepPx"
+      value="40"
+      step="1"
+      min="1"
+      max="200"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="smearCameraWeighted" />
+    Camera-weighted smear
+  </label>
+</div>
+
+<hr class="fxbus-divider" />
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="smearApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="smearStop">
+    Stop
+  </button>
+</div>

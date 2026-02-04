@@ -1,162 +1,205 @@
 <form class="fxbus-panel" data-fxbus-root="1">
   <style>
+    .fxbus-panel { color: var(--color-text-primary, inherit); }
+
     .fxbus-tabs {
       display: flex;
       gap: 6px;
-      margin-bottom: 6px;
       flex-wrap: wrap;
       align-items: center;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 1px solid var(--color-border-light-primary, rgba(128,128,128,0.35));
     }
 
-    .fxbus-tab-btn {
-      border: 1px solid var(--color-border-light-primary);
+    .fxbus-tabs .item {
+      position: relative;
+      appearance: none;
+      border: 1px solid var(--color-border-light-primary, rgba(128,128,128,0.35));
       border-radius: 10px;
-      padding: 6px 10px;
+      padding: 6px 12px;
       cursor: pointer;
-      background: var(--color-bg-option);
+      background: var(--color-bg-option, rgba(128,128,128,0.12));
       user-select: none;
-      font-weight: 650;
+      font-weight: 600;
       line-height: 1;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      color: var(--color-text-primary, inherit);
+      text-decoration: none;
+      transition:
+        background 120ms ease,
+        box-shadow 120ms ease,
+        transform 120ms ease,
+        border-color 120ms ease;
     }
 
-    .fxbus-tab-btn.is-active {
-      background: var(--color-bg-button);
-      border-color: var(--color-border-highlight);
+    .fxbus-tabs .item:hover:not(.active) { background: var(--color-bg-hover, rgba(128,128,128,0.18)); }
+    .fxbus-tabs .item:focus { outline: 2px solid var(--color-border-highlight, rgba(255,255,255,0.35)); outline-offset: 1px; }
+
+    .fxbus-tabs .item.active {
+      background: var(--color-bg-button, rgba(128,128,128,0.22));
+      border-color: var(--color-border-highlight, rgba(255,255,255,0.45));
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+      transform: translateY(-1px);
     }
 
-    .fxbus-tab-reset {
-      font-weight: 700;
+    .fxbus-tabs .item.active::after {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      bottom: -9px;
+      height: 3px;
+      border-radius: 3px;
+      background: var(--color-border-highlight, rgba(255,255,255,0.45));
     }
 
-    .fxbus-tab-sep {
-      display: inline-flex;
-      align-items: center;
-      margin: 0 4px;
-      opacity: 0.5;
+    .fxbus-tab-separator {
       user-select: none;
-      pointer-events: none;
+      padding: 0 6px;
+      opacity: 0.65;
+      color: var(--color-text-secondary, var(--color-text-primary, inherit));
     }
 
-    .fxbus-tabs-divider {
-      border: none;
-      border-top: 1px solid var(--color-border-light-primary);
-      margin: 6px 0 10px 0;
+    .fxbus-tabs .item.fxbus-tab-reset {
+      border-color: var(--color-border-danger, rgba(255, 80, 80, 0.65));
+      color: var(--color-text-danger, var(--color-text-primary, inherit));
     }
 
-    .fxbus-grid-2 {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
+    .fxbus-tabs .item.fxbus-tab-reset.active {
+      background: var(--color-bg-danger, rgba(255, 80, 80, 0.18));
+      border-color: var(--color-border-danger, rgba(255, 80, 80, 0.75));
     }
 
-    .fxbus-inline {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
+    .fxbus-panel-section { padding-top: 6px; }
 
     .fxbus-muted {
-      opacity: 0.8;
+      opacity: 0.85;
       font-size: 12px;
       line-height: 1.2;
+      color: var(--color-text-secondary, var(--color-text-primary, inherit));
     }
 
-    .fxbus-divider {
-      margin: 10px 0;
-    }
+    .fxbus-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .fxbus-inline { display: flex; gap: 8px; align-items: center; }
+    .fxbus-divider { margin: 10px 0; }
+    .fxbus-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .fxbus-row button { min-width: 120px; }
+    .fxbus-smallbtn { min-width: 90px !important; }
 
-    .fxbus-row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      justify-content: flex-start;
-      flex-wrap: wrap;
-    }
-
-    .fxbus-row button {
-      min-width: 120px;
-    }
-
-    .fxbus-smallbtn {
-      min-width: 90px !important;
-    }
-
-    .fxbus-panel .form-group {
-      margin: 6px 0;
-    }
-
-    .fxbus-panel label {
-      font-weight: 600;
-    }
+    .fxbus-panel .form-group { margin: 6px 0; }
+    .fxbus-panel label { font-weight: 600; }
 
     .fxbus-panel input[type="number"],
     .fxbus-panel input[type="text"],
     .fxbus-panel input[type="color"],
-    .fxbus-panel select {
-      width: 100%;
-    }
+    .fxbus-panel select { width: 100%; }
 
-    .fxbus-panel-section {
-      padding-top: 4px;
-    }
+    /* Deterministic visibility: only the active tab body displays */
+    .fxbus-panel-section.tab { display: none; }
+    .fxbus-panel-section.tab.active { display: block; }
   </style>
 
-  <nav class="fxbus-tabs" aria-label="FX Bus tabs">
+  <nav class="tabs fxbus-tabs" data-group="fxbus" aria-label="FX Bus tabs">
     {{#each tabs}}
-      <button
-        type="button"
-        class="fxbus-tab-btn {{#if (eq this.id ../activeTab)}}is-active{{/if}}"
+      <a
+        class="item {{#if (eq this.id ../activeTab)}}active{{/if}}"
+        data-group="fxbus"
         data-tab="{{this.id}}"
-        data-action="fxbusSelectTab"
-      >
-        {{this.label}}
-      </button>
+      >{{this.label}}</a>
     {{/each}}
 
-    <span class="fxbus-tab-sep" aria-hidden="true">|</span>
+    <span class="fxbus-tab-separator" aria-hidden="true">|</span>
 
-    <button
-      type="button"
-      class="fxbus-tab-btn fxbus-tab-reset"
+    <a
+      class="item fxbus-tab-reset {{#if (eq activeTab 'reset')}}active{{/if}}"
+      data-group="fxbus"
       data-tab="reset"
-      data-action="fxbusSelectTab"
-    >
-      Reset
-    </button>
+    >Reset</a>
   </nav>
 
-  <hr class="fxbus-tabs-divider">
-
-  {{#each panels}}
-    <section
-      class="fxbus-panel-section"
-      data-panel="{{this.id}}"
-      data-fxbus-panel="1"
-    >
-      {{{this.html}}}
-    </section>
-  {{/each}}
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'osc')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="osc"
+  >
+    {{> "modules/fxbus/templates/tabs/tokenOscTab.hbs"}}
+  </section>
 
   <section
-    class="fxbus-panel-section"
-    data-panel="reset"
-    data-fxbus-panel="1"
+    class="tab fxbus-panel-section {{#if (eq activeTab 'shake')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="shake"
   >
-    <p class="fxbus-muted">
-      Global reset immediately stops all FX and restores transforms.
-    </p>
+    {{> "modules/fxbus/templates/tabs/screenShakeTab.hbs"}}
+  </section>
 
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'pulse')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="pulse"
+  >
+    {{> "modules/fxbus/templates/tabs/screenPulseTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'vignette')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="vignette"
+  >
+    {{> "modules/fxbus/templates/tabs/screenVignetteTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'chromab')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="chromab"
+  >
+    {{> "modules/fxbus/templates/tabs/screenChromAbTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'noise')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="noise"
+  >
+    {{> "modules/fxbus/templates/tabs/screenNoiseTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'blur')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="blur"
+  >
+    {{> "modules/fxbus/templates/tabs/screenBlurTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'smear')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="smear"
+  >
+    {{> "modules/fxbus/templates/tabs/screenSmearTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'streak')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="streak"
+  >
+    {{> "modules/fxbus/templates/tabs/screenStreakTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'reset')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="reset"
+  >
+    <p class="fxbus-muted">Global reset immediately stops all FX and restores transforms.</p>
     <div class="fxbus-row">
-      <button
-        type="button"
-        style="min-width:160px;"
-        data-action="fxbusDoReset"
-      >
-        Execute Reset
-      </button>
+      <button type="button" data-action="fxbusDoReset" style="min-width:160px;">Execute Reset</button>
     </div>
   </section>
 </form>

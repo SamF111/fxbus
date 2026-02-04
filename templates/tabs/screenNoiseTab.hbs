@@ -1,0 +1,93 @@
+<!-- modules/fxbus/templates/tabs/screenNoiseTab.hbs -->
+<p class="fxbus-muted">
+  TV static overlay. Duration = 0 runs until stopped.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="noiseUntilStopped" checked/>
+    Run until stopped
+  </label>
+</div>
+
+<div class="form-group">
+  <label>Duration (ms)</label>
+  <input
+    type="number"
+    name="noiseDurationMs"
+    value="0"
+    step="50"
+    min="0"
+    max="600000"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Intensity (0-1)</label>
+    <input
+      type="number"
+      name="noiseIntensity"
+      value="0.25"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Alpha (0-1)</label>
+    <input
+      type="number"
+      name="noiseAlpha"
+      value="0.35"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Grain size (px)</label>
+    <input
+      type="number"
+      name="noiseGrainPx"
+      value="2"
+      step="1"
+      min="1"
+      max="24"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>FPS</label>
+    <input
+      type="number"
+      name="noiseFps"
+      value="20"
+      step="1"
+      min="1"
+      max="60"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="noiseMonochrome" checked/>
+    Monochrome
+  </label>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="noiseApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="noiseStop">Stop</button>
+</div>
