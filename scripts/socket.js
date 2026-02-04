@@ -1,3 +1,5 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\socket.js
+
 /**
  * FX Bus (Foundry VTT v12+)
  * Socket registration + message dispatch.
@@ -6,10 +8,35 @@
  * - Use "module.<id>" for module sockets.
  * - The emitting client does NOT receive the broadcast.
  * - Therefore: when you emit, also dispatch locally.
+ *
+ * Provenance:
+ * - Messages may contain __fxbus metadata added by the runtime emitter.
+ * - This file logs sender attribution (if present) on receipt and on dispatch errors.
  */
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && value.constructor === Object;
+}
+
+function logMessageProvenance(prefix, message) {
+  try {
+    const meta = message?.__fxbus;
+    const action = message?.action;
+
+    if (!meta) return;
+
+    const who = meta.userName ?? meta.userId ?? "unknown";
+    const role = meta.isGM ? "GM" : "Player";
+    const ts = Number.isFinite(meta.ts) ? new Date(meta.ts).toISOString() : null;
+
+    if (ts) {
+      console.log(`[FX Bus] ${prefix}`, { action, from: who, role, ts });
+    } else {
+      console.log(`[FX Bus] ${prefix}`, { action, from: who, role });
+    }
+  } catch {
+    // ignore
+  }
 }
 
 export function dispatchFx(runtime, message) {
@@ -23,6 +50,11 @@ export function dispatchFx(runtime, message) {
 
     handler(message);
   } catch (err) {
+    try {
+      logMessageProvenance("dispatch error", message);
+    } catch {
+      // ignore
+    }
     console.error("[FX Bus] Local dispatch error:", err);
   }
 }
@@ -44,8 +76,17 @@ export function registerFxSocket(runtime) {
   socket.on(runtime.socketName, (message) => {
     try {
       if (!isPlainObject(message)) return;
+
+      // Receiver-side provenance log (who triggered this FX)
+      logMessageProvenance("recv", message);
+
       dispatchFx(runtime, message);
     } catch (err) {
+      try {
+        logMessageProvenance("socket error", message);
+      } catch {
+        // ignore
+      }
       console.error("[FX Bus] Socket dispatch error:", err);
     }
   });

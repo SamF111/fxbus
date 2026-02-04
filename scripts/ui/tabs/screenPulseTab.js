@@ -1,3 +1,5 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\ui\tabs\screenPulseTab.js
+
 /**
  * FX Bus - Screen Pulse Tab (Foundry v13+ ApplicationV2)
  *
@@ -7,6 +9,10 @@
  * - Add colour pair wiring (expects pulseColourPicker + pulseColour in the HBS).
  * - Emit parameters that actually exist in the HBS (no phantom fields).
  * - Remove "Test local".
+ *
+ * Copy-to-macro support:
+ * - Adds buildApplyPayload(root, runtime) used by the GM panel.
+ * - Payload is identical to the "Start" emission.
  */
 
 import { num, normaliseHex, setDisabled, syncColourPair } from "./shared/panelUtils.js";
@@ -17,6 +23,43 @@ export function screenPulseTabDef() {
   return {
     id: TAB_ID,
     label: "Screen Pulse",
+
+    /**
+     * Build the socket payload for "Apply" / Copy-to-Macro.
+     *
+     * @param {HTMLElement} root
+     * @param {object} runtime
+     * @returns {object}
+     */
+    buildApplyPayload(root, _runtime) {
+      const panel = root.querySelector(
+        `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
+      );
+      if (!panel) throw new Error("ScreenPulse: panel not found");
+
+      const until = panel.querySelector('input[name="pulseUntilStopped"]');
+      const dur = panel.querySelector('input[name="pulseDurationMs"]');
+
+      const durationMs = until?.checked ? 0 : num(dur?.value, 1500);
+
+      return {
+        action: "fx.screenPulse.start",
+        colour: normaliseHex(
+          panel.querySelector('input[name="pulseColour"]')?.value,
+          "#ff0000"
+        ),
+        durationMs,
+        freqHz: num(panel.querySelector('input[name="pulseFreqHz"]')?.value, 2),
+        minAlpha: num(panel.querySelector('input[name="pulseMinAlpha"]')?.value, 0),
+        maxAlpha: num(panel.querySelector('input[name="pulseMaxAlpha"]')?.value, 0.35),
+        intensity: num(panel.querySelector('input[name="pulseIntensity"]')?.value, 1.0),
+        shape: String(panel.querySelector('select[name="pulseShape"]')?.value ?? "sine"),
+        ease: String(panel.querySelector('select[name="pulseEase"]')?.value ?? "inOut"),
+        blendMode: String(
+          panel.querySelector('select[name="pulseBlendMode"]')?.value ?? "SCREEN"
+        )
+      };
+    },
 
     wire(root, runtime) {
       const panel = root.querySelector(
@@ -41,32 +84,14 @@ export function screenPulseTabDef() {
       }
 
       function start() {
-        const durationMs = until?.checked ? 0 : num(dur?.value, 1500);
-
-        runtime.emit({
-          action: "fx.screenPulse.start",
-          colour: normaliseHex(
-            panel.querySelector('input[name="pulseColour"]')?.value,
-            "#ff0000"
-          ),
-          durationMs,
-          freqHz: num(panel.querySelector('input[name="pulseFreqHz"]')?.value, 2),
-          minAlpha: num(panel.querySelector('input[name="pulseMinAlpha"]')?.value, 0),
-          maxAlpha: num(panel.querySelector('input[name="pulseMaxAlpha"]')?.value, 0.35),
-          intensity: num(panel.querySelector('input[name="pulseIntensity"]')?.value, 1.0),
-          shape: String(panel.querySelector('select[name="pulseShape"]')?.value ?? "sine"),
-          ease: String(panel.querySelector('select[name="pulseEase"]')?.value ?? "inOut"),
-          blendMode: String(
-            panel.querySelector('select[name="pulseBlendMode"]')?.value ?? "SCREEN"
-          )
-        });
+        runtime.emit(this.buildApplyPayload(root, runtime));
       }
 
       panel
         .querySelector('button[type="button"][data-action="pulseStart"]')
         ?.addEventListener("click", (event) => {
           event.preventDefault();
-          start();
+          start.call(this);
         });
 
       panel

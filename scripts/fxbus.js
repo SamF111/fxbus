@@ -1,3 +1,5 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\fxbus.js
+
 /**
  * FX Bus (Foundry VTT v12+ / v13)
  * Client-side listener entrypoint.
@@ -11,6 +13,11 @@
  * - getSceneControlButtons fires during UI controls construction.
  * - Register the hook by setup at the latest (init is also fine).
  * - Force a controls re-render on ready so the bolt appears without a full reload.
+ *
+ * Provenance:
+ * - emit() enriches outgoing payloads with __fxbus sender metadata (userId, userName, isGM, ts).
+ * - Handlers receive the enriched payload.
+ * - Broadcast uses the enriched payload so receivers can log sender identity.
  */
 
 import { registerFxSocket } from "./socket.js";
@@ -27,6 +34,9 @@ function getOrCreateRuntime() {
    * emit() always:
    * - applies locally if a handler exists
    * - broadcasts to other clients via game.socket
+   *
+   * emit() also:
+   * - enriches payloads with sender metadata under __fxbus
    */
   if (globalThis[RUNTIME_KEY]) return globalThis[RUNTIME_KEY];
 
@@ -46,10 +56,21 @@ function getOrCreateRuntime() {
 
       const t0 = performance.now();
 
+      const enriched = {
+        ...payload,
+        __fxbus: {
+          userId: game.userId,
+          userName: game.user?.name,
+          isGM: game.user?.isGM === true,
+          ts: Date.now()
+        }
+      };
+
       try {
         console.log("[FX Bus] emit", {
           action,
-          payload: { ...payload },
+          from: enriched.__fxbus,
+          payload: { ...enriched },
           socket: runtime.socketName
         });
       } catch {
@@ -59,21 +80,21 @@ function getOrCreateRuntime() {
       const handler = runtime.handlers.get(action);
       if (typeof handler === "function") {
         try {
-          handler(payload);
+          handler(enriched);
           const dt = Math.round((performance.now() - t0) * 1000) / 1000;
-          console.log("[FX Bus] handled", { action, ms: dt });
+          console.log("[FX Bus] handled", { action, ms: dt, from: enriched.__fxbus });
         } catch (err) {
-          console.error("[FX Bus] handler error", { action, err });
+          console.error("[FX Bus] handler error", { action, err, from: enriched.__fxbus });
         }
       } else {
-        console.warn("[FX Bus] no handler", { action });
+        console.warn("[FX Bus] no handler", { action, from: enriched.__fxbus });
       }
 
       try {
-        game.socket.emit(runtime.socketName, payload);
-        console.log("[FX Bus] broadcast", { action });
+        game.socket.emit(runtime.socketName, enriched);
+        console.log("[FX Bus] broadcast", { action, from: enriched.__fxbus });
       } catch (err) {
-        console.error("[FX Bus] socket emit failed", { action, err });
+        console.error("[FX Bus] socket emit failed", { action, err, from: enriched.__fxbus });
       }
     }
   };

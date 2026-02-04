@@ -11,6 +11,10 @@
  *   - Reads streak_rampMs (with fallbacks)
  *   - Clamps to 0..1000ms
  *   - Always emitted; FX decides how to use it (indefinite mode uses it)
+ *
+ * Copy-to-macro support:
+ * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
+ * - Payload is identical to Apply (start/update).
  */
 
 const TAB_ID = "streak";
@@ -47,6 +51,46 @@ function clamp(n, lo, hi) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function buildApplyPayload(panel) {
+  const RUN_NAMES = [
+    "streak_runUntilStopped",
+    "runUntilStopped",
+    "streak_run_until_stopped",
+    "streak_infinite",
+    "streak_indefinite"
+  ];
+
+  const DURATION_NAMES = ["streak_durationMs", "durationMs", "streak_duration", "duration"];
+
+  const RAMP_NAMES = [
+    "streak_rampMs",
+    "rampMs",
+    "streak_ramp",
+    "ramp",
+    "streak_ramp_ms"
+  ];
+
+  const runUntilStopped = bool(panel, RUN_NAMES, false);
+
+  const durationMs = runUntilStopped ? 0 : num(panel, DURATION_NAMES, 600);
+
+  const rampMs = clamp(num(panel, RAMP_NAMES, 250), 0, RAMP_MS_MAX);
+
+  return {
+    action: "fx.screenStreak.start",
+    strength: num(panel, ["streak_strength", "strength"], 0.6),
+    persistence: num(panel, ["streak_persistence", "persistence"], 0.9),
+    lengthPx: num(panel, ["streak_lengthPx", "lengthPx"], 60),
+    angleDeg: num(panel, ["streak_angleDeg", "angleDeg"], 0),
+    jitterPx: num(panel, ["streak_jitterPx", "jitterPx"], 0),
+    freqHz: num(panel, ["streak_freqHz", "freqHz"], 0),
+    durationMs,
+    rampMs,
+    ease: str(panel, ["streak_ease", "ease"], "inOut"),
+    additive: bool(panel, ["streak_additive", "additive"], false)
+  };
+}
+
 function wireTab(root, runtime) {
   if (!root || !runtime?.emit) return;
 
@@ -65,7 +109,9 @@ function wireTab(root, runtime) {
 
   if (!panel) return;
 
-  const startBtn =
+  const applyBtn =
+    panel.querySelector('[data-action="apply"]') ??
+    panel.querySelector('[data-action="streakApply"]') ??
     panel.querySelector('[data-action="start"]') ??
     panel.querySelector('[data-action="streakStart"]');
 
@@ -83,14 +129,6 @@ function wireTab(root, runtime) {
   ];
 
   const DURATION_NAMES = ["streak_durationMs", "durationMs", "streak_duration", "duration"];
-
-  const RAMP_NAMES = [
-    "streak_rampMs",
-    "rampMs",
-    "streak_ramp",
-    "ramp",
-    "streak_ramp_ms"
-  ];
 
   function applyRunToggleUi() {
     const runEl = getElByNames(panel, RUN_NAMES);
@@ -120,34 +158,13 @@ function wireTab(root, runtime) {
   }
   applyRunToggleUi();
 
-  if (startBtn) {
-    startBtn.addEventListener(
+  if (applyBtn) {
+    applyBtn.addEventListener(
       "click",
       (event) => {
         event.preventDefault();
 
-        const runUntilStopped = bool(panel, RUN_NAMES, false);
-
-        const durationMs = runUntilStopped
-          ? 0
-          : num(panel, DURATION_NAMES, 600);
-
-        const rampMs = clamp(num(panel, RAMP_NAMES, 250), 0, RAMP_MS_MAX);
-
-        const payload = {
-          action: "fx.screenStreak.start",
-          strength: num(panel, ["streak_strength", "strength"], 0.6),
-          persistence: num(panel, ["streak_persistence", "persistence"], 0.9),
-          lengthPx: num(panel, ["streak_lengthPx", "lengthPx"], 60),
-          angleDeg: num(panel, ["streak_angleDeg", "angleDeg"], 0),
-          jitterPx: num(panel, ["streak_jitterPx", "jitterPx"], 0),
-          freqHz: num(panel, ["streak_freqHz", "freqHz"], 0),
-          durationMs,
-          rampMs,
-          ease: str(panel, ["streak_ease", "ease"], "inOut"),
-          additive: bool(panel, ["streak_additive", "additive"], false)
-        };
-
+        const payload = buildApplyPayload(panel);
         console.debug("[FX Bus] screenStreak.start payload", payload);
         runtime.emit(payload);
       },
@@ -171,6 +188,24 @@ export function screenStreakTabDef() {
   return {
     id: TAB_ID,
     label: "Streak",
+
+    /**
+     * Build the socket payload for "Apply" / Copy-to-Macro.
+     *
+     * @param {HTMLElement} root
+     * @param {object} runtime
+     * @returns {object}
+     */
+    buildApplyPayload(root, _runtime) {
+      const panel =
+        root.querySelector('.tab[data-group="fxbus"][data-tab="streak"]') ??
+        root.querySelector('[data-fxbus-tab="streak"]');
+
+      if (!panel) throw new Error("ScreenStreak: panel not found");
+
+      return buildApplyPayload(panel);
+    },
+
     wire: (root, runtime) => wireTab(root, runtime)
   };
 }

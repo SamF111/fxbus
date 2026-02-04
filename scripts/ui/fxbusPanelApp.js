@@ -11,9 +11,16 @@
  * - Re-bind tab handlers on every render.
  * - Use AbortController to prevent stacked listeners across re-renders.
  *
+ * Copy-to-macro support:
+ * - Adds an Application action `fxbusCopyToMacro`.
+ * - Expects the active tabDef to expose `buildApplyPayload(root, runtime)` returning a socket payload.
+ * - Generates a macro script that emits that payload over the FX Bus socket and copies it to clipboard.
+ *
  * Notes:
  * - Ensure TAB_PARTIALS includes any new tab templates so partials are resolvable.
  * - Ensure buildTabs() includes the matching tabDef so wiring occurs.
+ * - Add a button in your tab template with: data-action="fxbusCopyToMacro"
+ * - Ensure each tabDef provides `buildApplyPayload` (and optionally `macroName`).
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
@@ -25,6 +32,11 @@ import { screenNoiseTabDef } from "./tabs/screenNoiseTab.js";
 import { screenBlurTabDef } from "./tabs/screenBlurTab.js";
 import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
+
+import {
+  fxbusBuildMacroSource,
+  fxbusCopyTextToClipboard
+} from "../util/fxbusMacroUtils.js";
 
 const MODULE_ID = "fxbus";
 const UI_STATE_KEY = "uiState";
@@ -210,6 +222,90 @@ function wireTabClicks(app, root, abortSignal) {
   );
 }
 
+/**
+ * Resolve the currently active tab definition.
+ *
+ * Behaviour:
+ * - Uses the app's `_activeTab` id to find the matching tabDef from `_tabs`.
+ * - Returns null if the tab is not found (should not happen if wiring is correct).
+ *
+ * Contract:
+ * - tabDef is expected to contain `{ id, label, wire }` as today.
+ * - For copy-to-macro, tabDef should additionally provide:
+ *   - `buildApplyPayload(root, runtime) -> object` (required for copy)
+ *   - `macroName` (optional string or function returning string)
+ */
+function getActiveTabDef(app) {
+  const tabId = String(app?._activeTab ?? "");
+  if (!tabId) return null;
+  return app?._tabs?.find?.((t) => t?.id === tabId) ?? null;
+}
+
+/**
+ * Generate a macro script for the current tab's "Apply" and copy it to clipboard.
+ *
+ * Behaviour:
+ * - Delegates payload creation to the active tabDef via `buildApplyPayload`.
+ * - Builds a standalone macro command that emits the payload on the FX Bus socket.
+ * - Copies the macro script into the user's clipboard.
+ *
+ * Hard requirements:
+ * - `globalThis.fxbus.emit` must exist (panel already enforces runtime presence).
+ * - Active tabDef must implement `buildApplyPayload(root, runtime)`.
+ *
+ * Failure mode:
+ * - Logs a clear console error and shows a Foundry notification.
+ */
+async function copyActiveTabApplyToClipboard(app, root, runtime) {
+  const tabDef = getActiveTabDef(app);
+  if (!tabDef) {
+    ui.notifications.error("FX Bus: active tab not found.");
+    return;
+  }
+
+  const builder = tabDef.buildApplyPayload;
+  if (typeof builder !== "function") {
+    ui.notifications.error(
+      `FX Bus: tab '${tabDef.id}' does not support Copy to Macro yet.`
+    );
+    console.error("[FX Bus] Missing buildApplyPayload on tabDef", tabDef);
+    return;
+  }
+
+  let payload = null;
+  try {
+    payload = builder(root, runtime);
+  } catch (err) {
+    ui.notifications.error("FX Bus: failed to build macro payload. See console.");
+    console.error("[FX Bus] buildApplyPayload failed", { tab: tabDef.id, err });
+    return;
+  }
+
+  if (!payload || typeof payload !== "object") {
+    ui.notifications.error("FX Bus: invalid macro payload.");
+    console.error("[FX Bus] Invalid payload returned", { tab: tabDef.id, payload });
+    return;
+  }
+
+  const timeTag = new Date().toISOString().replace(/[:.]/g, "-").slice(11, 19);
+  const macroName =
+    typeof tabDef.macroName === "function"
+      ? String(tabDef.macroName(root) ?? `FX Bus - ${tabDef.label}`)
+      : typeof tabDef.macroName === "string" && tabDef.macroName.length
+        ? tabDef.macroName
+        : `FX Bus - ${tabDef.label} - ${timeTag}`;
+
+  const macroSource = fxbusBuildMacroSource(macroName, payload, { requireGM: true });
+
+  try {
+    await fxbusCopyTextToClipboard(macroSource);
+    ui.notifications.info("FX Bus: macro copied to clipboard.");
+  } catch (err) {
+    ui.notifications.error("FX Bus: clipboard copy blocked. See console.");
+    console.error("[FX Bus] Clipboard copy failed", err);
+  }
+}
+
 class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "fxbus-gm-control-panel",
@@ -217,7 +313,10 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     classes: ["fxbus-panel-app"],
     window: { title: "FX Bus - GM Control Panel", resizable: true },
     position: { width: 560, height: "auto" },
-    actions: { fxbusDoReset: FxBusGmControlPanelApp._actionDoReset }
+    actions: {
+      fxbusDoReset: FxBusGmControlPanelApp._actionDoReset,
+      fxbusCopyToMacro: FxBusGmControlPanelApp._actionCopyToMacro
+    }
   };
 
   static PARTS = {
@@ -302,6 +401,22 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const runtime = globalThis.fxbus;
     if (!runtime?.emit) return;
     runtime.emit({ action: "fx.bus.reset" });
+  }
+
+  static async _actionCopyToMacro(event, _target) {
+    event.preventDefault();
+
+    const app = this;
+    const runtime = globalThis.fxbus;
+    const root = app.element?.querySelector?.("form.fxbus-panel");
+    if (!root) return;
+
+    if (!runtime?.emit) {
+      ui.notifications.error("FX Bus runtime not found. Enable fxbus and reload.");
+      return;
+    }
+
+    await copyActiveTabApplyToClipboard(app, root, runtime);
   }
 }
 
