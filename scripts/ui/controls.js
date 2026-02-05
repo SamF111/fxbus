@@ -3,19 +3,15 @@
 /**
  * FX Bus - Scene Controls (Foundry v13)
  *
- * What this version fixes (based on your last result: lightning bolt OK, but tools do nothing):
- * - Removes the brittle “only run on DOM click target” gating - in v13 the tool onChange
- *   often fires with an event shape that does not contain the clicked <li>.
- * - Prevents the FX Bus control itself from auto-opening the popout by using an inert
- *   dummy activeTool.
- * - Avoids the “double lightning bolt” look by giving the dummy tool a NON-bolt icon.
- * - Keeps the “no undefined.onChange” guarantee: activeTool always points to a real tool.
+ * Fixes:
+ * - Prevents token interaction lock-ups: FX Bus control now keeps a hidden "select" tool as the active tool,
+ *   so normal token selection/dragging remains functional even while FX Bus is the active control.
+ * - Clicking the lightning bolt never opens the popout: the active tool is inert "select".
+ * - Clicking an FX Bus tool opens the popout, then immediately returns the active tool to hidden "select"
+ *   to avoid breaking token clicks/movement.
+ * - No duplicate lightning bolt: hidden tool is not a bolt icon and is button:false.
+ * - No undefined.onChange: activeTool always points to a real, present tool.
  * - Prevents duplicate injection across hot reloads by replacing the existing hook.
- *
- * Behaviour:
- * - Clicking the lightning bolt shows the FX Bus tool palette only (no popout).
- * - Clicking an FX Bus tool opens the popout focused on that tab.
- * - Switching away (Token controls etc.) does not throw.
  */
 
 import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
@@ -24,7 +20,8 @@ const CONTROL_NAME = "fxbus";
 const LAYER_NAME = "token";
 const HOOK_ID = "getSceneControlButtons";
 
-const DUMMY_TOOL = "fxbus-dummy";
+// Critical: use the Token layer's expected tool name so token interactions keep working.
+const SAFE_TOOL = "select";
 
 function openTab(startTab) {
   openFxBusGmControlPanel({ startTab });
@@ -36,13 +33,25 @@ function resetAll() {
   runtime.emit({ action: "fx.bus.reset" });
 }
 
-function makeDummyTool() {
+function restoreSafeTool() {
+  try {
+    // Keep FX Bus control selected, but restore tool to SAFE_TOOL so token interaction remains normal.
+    queueMicrotask(() => {
+      if (!ui?.controls) return;
+      if (ui.controls.control?.name !== CONTROL_NAME) return;
+      ui.controls.activateTool(SAFE_TOOL);
+    });
+  } catch {
+    // ignore
+  }
+}
+
+function makeSafeTool() {
   return {
-    name: DUMMY_TOOL,
-    title: "FX Bus",
-    // Important: NOT a bolt, otherwise you visually get “two lightning bolts” when this becomes active.
-    icon: "fas fa-circle",
-    button: false, // keep it out of the palette
+    name: SAFE_TOOL,
+    title: "Select",
+    icon: "fas fa-mouse-pointer", // not a bolt; also hidden anyway
+    button: false, // hidden from palette
     visible: true,
     toggle: false,
     onChange: () => {
@@ -60,17 +69,16 @@ function makeTool(name, title, icon, run) {
     visible: true,
     toggle: false,
     onChange: (_event, active) => {
-      // In v13, tool selection may call onChange with a non-DOM event or undefined.
-      // Rely only on the boolean.
       if (!active) return;
       run();
+      restoreSafeTool();
     }
   };
 }
 
 function makeFxbusControlArrayShape() {
   const tools = [
-    makeDummyTool(),
+    makeSafeTool(),
 
     makeTool("fxbus-osc", "Token Oscillation", "fas fa-ship", () => openTab("osc")),
     makeTool("fxbus-shake", "Screen Shake", "fas fa-wave-square", () => openTab("shake")),
@@ -92,8 +100,8 @@ function makeFxbusControlArrayShape() {
     visible: true,
 
     // Selecting the control auto-activates activeTool.
-    // Keep it inert so the popout never opens from clicking the lightning bolt.
-    activeTool: DUMMY_TOOL,
+    // Use SAFE_TOOL so token selection/dragging keeps working and no popout opens.
+    activeTool: SAFE_TOOL,
 
     tools
   };
@@ -106,9 +114,9 @@ function makeFxbusControlObjectShape() {
     icon: "fas fa-bolt",
     layer: LAYER_NAME,
     visible: true,
-    activeTool: DUMMY_TOOL,
+    activeTool: SAFE_TOOL,
     tools: {
-      [DUMMY_TOOL]: makeDummyTool(),
+      [SAFE_TOOL]: makeSafeTool(),
 
       "fxbus-osc": makeTool("fxbus-osc", "Token Oscillation", "fas fa-ship", () => openTab("osc")),
       "fxbus-shake": makeTool("fxbus-shake", "Screen Shake", "fas fa-wave-square", () => openTab("shake")),

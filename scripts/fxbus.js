@@ -24,9 +24,18 @@ import { registerFxSocket } from "./socket.js";
 import { registerBuiltInEffects } from "./effects/index.js";
 import { registerFxBusSceneControls } from "./ui/controls.js";
 
-const MODULE_ID = "fxbus";
 const RUNTIME_KEY = "fxbus";
-const SOCKET_NAME = "module.fxbus";
+
+function getModule() {
+  /** Large comment:
+   * Resolve module metadata from Foundry's loaded module registry.
+   * This is the single source of truth for id/version/title/etc. (module.json).
+   * Never hardcode version strings in runtime code.
+   */
+  const mod = game.modules.get(RUNTIME_KEY);
+  if (!mod) throw new Error(`[FX Bus] Module "${RUNTIME_KEY}" not found in game.modules.`);
+  return mod;
+}
 
 function getOrCreateRuntime() {
   /** Large comment:
@@ -40,10 +49,14 @@ function getOrCreateRuntime() {
    */
   if (globalThis[RUNTIME_KEY]) return globalThis[RUNTIME_KEY];
 
+  const mod = getModule();
+  const socketName = `module.${mod.id}`;
+
   const runtime = {
-    id: MODULE_ID,
-    version: "0.5.1",
-    socketName: SOCKET_NAME,
+    id: mod.id,
+    version: mod.version,
+    title: mod.title,
+    socketName,
 
     tickers: new Map(),
     tokenFx: new Map(),
@@ -108,9 +121,9 @@ function getOrCreateRuntime() {
 /* -------------------------------------------- */
 
 Hooks.once("init", () => {
-  getOrCreateRuntime();
+  const runtime = getOrCreateRuntime();
 
-  game.settings.register(MODULE_ID, "uiState", {
+  game.settings.register(runtime.id, "uiState", {
     name: "FX Bus UI State",
     scope: "client",
     config: false,
@@ -132,6 +145,6 @@ Hooks.once("ready", () => {
   registerFxSocket(runtime);
 
   console.log(
-    `[FX Bus] Ready | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`
+    `[FX Bus] Ready | v${runtime.version} | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`
   );
 });

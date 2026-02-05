@@ -4,7 +4,8 @@
  *
  * Design:
  * - Exactly one canvas.app.ticker callback per effect type.
- * - Tickers self-remove when no active state remains.
+ * - If an effect is "re-started" or "updated", its ticker callback is replaced to avoid stale closures.
+ * - Any uncaught error inside an effect tick forcibly removes that effect ticker to prevent hard lock states.
  * - Delta time derived from ticker.deltaMS for deterministic motion.
  */
 
@@ -18,18 +19,45 @@ function getTicker() {
 /**
  * Ensure a ticker exists for an effect.
  *
+ * Behaviour:
+ * - If a ticker already exists for effectName, it is replaced (remove old, add new).
+ * - The wrapped tick runs inside a try/catch. On error, the ticker is removed to prevent the
+ *   effect from continuing to clobber transforms and breaking interaction until reload.
+ *
  * @param {object} runtime
  * @param {string} effectName
  * @param {(deltaMS:number)=>void} tickFn
  */
 export function ensureTicker(runtime, effectName, tickFn) {
-  if (runtime.tickers.has(effectName)) return;
-
+  /**
+   * Always replace existing ticker for this effectName.
+   * This avoids subtle bugs where an earlier closure keeps running after a "Start / Update".
+   */
   const ticker = getTicker();
 
+  const prev = runtime.tickers.get(effectName);
+  if (prev) {
+    try {
+      ticker.remove(prev);
+    } catch {
+      // ignore
+    }
+    runtime.tickers.delete(effectName);
+  }
+
   const wrapped = (delta) => {
-    const deltaMS = ticker.deltaMS ?? (delta * (1000 / 60));
-    tickFn(deltaMS);
+    /**
+     * PIXI ticker passes a delta scalar (frames at 60 fps) as `delta`.
+     * Foundry exposes deterministic deltaMS on the ticker instance.
+     */
+    const deltaMS = ticker.deltaMS ?? (Number(delta) * (1000 / 60));
+
+    try {
+      tickFn(deltaMS);
+    } catch (err) {
+      console.error(`[FX Bus] ${effectName} tick failed; disabling ticker to prevent lock-up.`, err);
+      cleanupTicker(runtime, effectName);
+    }
   };
 
   runtime.tickers.set(effectName, wrapped);
@@ -37,16 +65,27 @@ export function ensureTicker(runtime, effectName, tickFn) {
 }
 
 /**
- * Remove a ticker if no state remains for that effect.
+ * Remove a ticker for an effect.
  *
  * @param {object} runtime
  * @param {string} effectName
  */
 export function cleanupTicker(runtime, effectName) {
+  /**
+   * Remove is idempotent:
+   * - If the wrapped fn is absent, no action.
+   * - Safe to call from inside a failing tick.
+   */
   const wrapped = runtime.tickers.get(effectName);
   if (!wrapped) return;
 
   const ticker = getTicker();
-  ticker.remove(wrapped);
+
+  try {
+    ticker.remove(wrapped);
+  } catch {
+    // ignore
+  }
+
   runtime.tickers.delete(effectName);
 }

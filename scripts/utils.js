@@ -1,3 +1,5 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\utils.js
+
 /**
  * FX Bus (Foundry VTT v12+)
  * Shared utility functions.
@@ -6,31 +8,60 @@
  * - Math helpers.
  * - Snapshot and restore of render transforms.
  * - Token mesh resolution.
+ * - Stage snapshotting.
  *
  * Constraints:
  * - Visual-only.
- * - Exact restoration required.
+ * - Exact restoration required where used.
  */
 
 /* ----------------------------- Math utilities ----------------------------- */
 
+/**
+ * Clamp a value to [min, max].
+ *
+ * @param {number} value
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
 export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+/**
+ * Degrees to radians.
+ *
+ * @param {number} deg
+ * @returns {number}
+ */
 export function degToRad(deg) {
   return (deg * Math.PI) / 180;
 }
 
+/**
+ * Linear interpolation.
+ *
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t
+ * @returns {number}
+ */
 export function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
+/**
+ * Quadratic ease-out.
+ *
+ * @param {number} t
+ * @returns {number}
+ */
 export function easeOutQuad(t) {
   return 1 - (1 - t) * (1 - t);
 }
 
-/* --------------------------- Token render access --------------------------- */
+/* --------------------------- Token render access -------------------------- */
 
 /**
  * Resolve the render object for a token.
@@ -46,13 +77,13 @@ export function getTokenRenderObject(token) {
   return null;
 }
 
-/* -------------------------- Snapshot and restore --------------------------- */
+/* -------------------------- Snapshot and restore -------------------------- */
 
 /**
  * Capture the base render transform for a token.
  *
  * @param {Token} token
- * @returns {object|null}
+ * @returns {{x:number,y:number,rotation:number,scaleX:number,scaleY:number}|null}
  */
 export function snapshotTokenTransform(token) {
   const obj = getTokenRenderObject(token);
@@ -71,7 +102,7 @@ export function snapshotTokenTransform(token) {
  * Restore a previously captured transform exactly.
  *
  * @param {Token} token
- * @param {object} snapshot
+ * @param {{x:number,y:number,rotation:number,scaleX:number,scaleY:number}|null} snapshot
  */
 export function restoreTokenTransform(token, snapshot) {
   if (!snapshot) return;
@@ -85,12 +116,12 @@ export function restoreTokenTransform(token, snapshot) {
   obj.scale.set(snapshot.scaleX, snapshot.scaleY);
 }
 
-/* --------------------------- Stage snapshotting ---------------------------- */
+/* --------------------------- Stage snapshotting --------------------------- */
 
 /**
  * Snapshot the canvas stage position.
  *
- * @returns {{x:number,y:number}}
+ * @returns {{x:number,y:number}|null}
  */
 export function snapshotStage() {
   const stage = canvas?.app?.stage;
@@ -105,7 +136,7 @@ export function snapshotStage() {
 /**
  * Restore the canvas stage position.
  *
- * @param {{x:number,y:number}} snapshot
+ * @param {{x:number,y:number}|null} snapshot
  */
 export function restoreStage(snapshot) {
   if (!snapshot) return;
