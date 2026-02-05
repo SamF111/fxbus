@@ -20,7 +20,7 @@
   ],
   "socket": true,
   "url": "https://github.com/SamF111/fxbus",
-  "readme": "https://github.com/SamF111/fxbus/README.md",
+  "readme": "https://raw.githubusercontent.com/SamF111/fxbus/main/README.md",
   "bugs": "https://github.com/SamF111/fxbus/issues",
   "changelog": "https://github.com/SamF111/fxbus/releases",
   "license": "LICENSE",
