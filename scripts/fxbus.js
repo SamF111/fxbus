@@ -42,7 +42,7 @@ function getOrCreateRuntime() {
 
   const runtime = {
     id: MODULE_ID,
-    version: "0.5.0",
+    version: "0.5.1",
     socketName: SOCKET_NAME,
 
     tickers: new Map(),

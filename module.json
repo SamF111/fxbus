@@ -2,7 +2,7 @@
   "id": "fxbus",
   "title": "FX Bus",
   "description": "GM-broadcast, client-side visual effects framework. Provides a single socket-based FX listener that renders deterministic, visual-only effects locally on each client using PIXI and canvas.app.ticker. No document mutation. Explicit start/stop semantics with global reset.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "authors": [
     {
       "name": "mintchoc"
@@ -25,5 +25,5 @@
   "changelog": "https://github.com/SamF111/fxbus/releases",
   "license": "LICENSE",
   "manifest": "https://github.com/SamF111/fxbus/releases/latest/download/module.json",
-  "download": "https://github.com/SamF111/fxbus/releases/latest/download/fxbus-0.5.0.zip"
+  "download": "https://github.com/SamF111/fxbus/releases/latest/download/fxbus-0.5.1.zip"
 }
