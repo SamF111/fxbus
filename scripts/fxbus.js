@@ -1,7 +1,7 @@
 // D:\FoundryVTT\Data\modules\fxbus\scripts\fxbus.js
 
 /**
- * FX Bus (Foundry VTT v12+ / v13)
+ * FX Bus (Foundry VTT v13)
  * Client-side listener entrypoint.
  *
  * Guarantees:
@@ -10,9 +10,9 @@
  * - UI state is persisted per-client.
  *
  * Toolbar injection:
- * - getSceneControlButtons fires during UI controls construction.
- * - Register the hook by setup at the latest (init is also fine).
- * - Force a controls re-render on ready so the bolt appears without a full reload.
+ * - Uses getSceneControlButtons during UI controls construction.
+ * - Registers the hook on init (setup would also work).
+ * - Does not force a controls re-render (avoids cross-module control-state races).
  *
  * Provenance:
  * - emit() enriches outgoing payloads with __fxbus sender metadata (userId, userName, isGM, ts).
@@ -118,7 +118,6 @@ Hooks.once("init", () => {
     default: {}
   });
 
-  // Safe to register here; also fine in setup.
   registerFxBusSceneControls();
 });
 
@@ -131,13 +130,6 @@ Hooks.once("ready", () => {
 
   registerBuiltInEffects(runtime);
   registerFxSocket(runtime);
-
-  // Ensure the left-toolbar picks up our injected control group immediately.
-  try {
-    ui.controls.render(true);
-  } catch {
-    // ignore
-  }
 
   console.log(
     `[FX Bus] Ready | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`
