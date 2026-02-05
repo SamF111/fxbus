@@ -1,0 +1,17 @@
+name: Publish to Foundry
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Notify Foundry of new release
+        run: |
+          curl -X POST "https://foundryvtt.com/_api/packages/release_version/" \
+            -F "token=${{ secrets.FOUNDRY_PACKAGE_TOKEN }}" \
+            -F "manifest=https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/module.json" \
+            -F "notes=https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }}"
