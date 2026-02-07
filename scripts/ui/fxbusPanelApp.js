@@ -14,7 +14,7 @@
  * Copy-to-macro support:
  * - Adds an Application action `fxbusCopyToMacro`.
  * - Expects the active tabDef to expose `buildApplyPayload(root, runtime)` returning a socket payload.
- * - Generates a macro script that emits that payload over the FX Bus socket and copies it to clipboard.
+ * - Generates a macro script that emits that payload via the FX Bus runtime and copies it to clipboard.
  *
  * Notes:
  * - Ensure TAB_PARTIALS includes any new tab templates so partials are resolvable.
@@ -32,6 +32,7 @@ import { screenNoiseTabDef } from "./tabs/screenNoiseTab.js";
 import { screenBlurTabDef } from "./tabs/screenBlurTab.js";
 import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
+import { resetTabDef } from "./tabs/resetTab.js";
 
 import {
   fxbusBuildMacroSource,
@@ -53,7 +54,8 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/screenNoiseTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenBlurTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenSmearTab.hbs`,
-  `modules/${MODULE_ID}/templates/tabs/screenStreakTab.hbs`
+  `modules/${MODULE_ID}/templates/tabs/screenStreakTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/resetTab.hbs`
 ];
 
 let TEMPLATES_PRELOADED = false;
@@ -71,7 +73,13 @@ async function preloadFxBusTemplates() {
   for (const path of TAB_PARTIALS) {
     const partialName = templatePathToPartialName(path);
     const templateFn = await getTemplate(path);
+
+    // Support both include styles:
+    // - {{> "modules/fxbus/templates/tabs/whatever.hbs"}}
+    // - {{> "whatever"}}
+    // Some Foundry/template paths are resolved by full path, so register both keys.
     Handlebars.registerPartial(partialName, templateFn);
+    Handlebars.registerPartial(path, templateFn);
   }
 
   TEMPLATES_PRELOADED = true;
@@ -87,7 +95,8 @@ function buildTabs() {
     screenNoiseTabDef(),
     screenBlurTabDef(),
     screenSmearTabDef(),
-    screenStreakTabDef()
+    screenStreakTabDef(),
+    resetTabDef()
   ];
 }
 
@@ -171,8 +180,6 @@ function wireStatePersistence(root) {
 
 /**
  * Manual tab controller - toggles both nav and content.
- * Visibility is ultimately enforced by CSS (tab.active), but we also set display
- * to be robust against theme variance.
  */
 function setActiveTab(root, tabId) {
   const navItems = Array.from(
@@ -195,10 +202,6 @@ function setActiveTab(root, tabId) {
   }
 }
 
-/**
- * Bind tab clicks to the current DOM root.
- * AbortController prevents stacking listeners across re-renders.
- */
 function wireTabClicks(app, root, abortSignal) {
   const nav = root.querySelector(".tabs[data-group='fxbus']");
   if (!nav) return;
@@ -222,40 +225,42 @@ function wireTabClicks(app, root, abortSignal) {
   );
 }
 
-/**
- * Resolve the currently active tab definition.
- *
- * Behaviour:
- * - Uses the app's `_activeTab` id to find the matching tabDef from `_tabs`.
- * - Returns null if the tab is not found (should not happen if wiring is correct).
- *
- * Contract:
- * - tabDef is expected to contain `{ id, label, wire }` as today.
- * - For copy-to-macro, tabDef should additionally provide:
- *   - `buildApplyPayload(root, runtime) -> object` (required for copy)
- *   - `macroName` (optional string or function returning string)
- */
 function getActiveTabDef(app) {
   const tabId = String(app?._activeTab ?? "");
   if (!tabId) return null;
   return app?._tabs?.find?.((t) => t?.id === tabId) ?? null;
 }
 
-/**
- * Generate a macro script for the current tab's "Apply" and copy it to clipboard.
- *
- * Behaviour:
- * - Delegates payload creation to the active tabDef via `buildApplyPayload`.
- * - Builds a standalone macro command that emits the payload on the FX Bus socket.
- * - Copies the macro script into the user's clipboard.
- *
- * Hard requirements:
- * - `globalThis.fxbus.emit` must exist (panel already enforces runtime presence).
- * - Active tabDef must implement `buildApplyPayload(root, runtime)`.
- *
- * Failure mode:
- * - Logs a clear console error and shows a Foundry notification.
- */
+function getFxBusModuleVersion() {
+  try {
+    const mod = game.modules?.get?.(MODULE_ID);
+    const v =
+      mod?.version ??
+      mod?.data?.version ??
+      mod?.manifest?.version ??
+      "";
+    return String(v || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function getMacroMeta() {
+  const generatedAt = new Date().toISOString();
+  const generatedBy =
+    String(game.user?.name ?? "").trim() ||
+    String(game.user?.id ?? "").trim() ||
+    null;
+
+  const fxbusVersion = getFxBusModuleVersion();
+
+  return {
+    generatedAt,
+    generatedBy,
+    fxbusVersion
+  };
+}
+
 async function copyActiveTabApplyToClipboard(app, root, runtime) {
   const tabDef = getActiveTabDef(app);
   if (!tabDef) {
@@ -287,15 +292,22 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
     return;
   }
 
-  const timeTag = new Date().toISOString().replace(/[:.]/g, "-").slice(11, 19);
+  // Use date in the name, not just time. Keep filesystem-safe-ish for copy/paste.
+  const iso = new Date().toISOString(); // 2026-02-07T13:56:32.123Z
+  const dateTag = iso.slice(0, 10); // 2026-02-07
+  const timeTag = iso.slice(11, 19).replace(/:/g, "-"); // 13-56-32
+
   const macroName =
     typeof tabDef.macroName === "function"
       ? String(tabDef.macroName(root) ?? `FX Bus - ${tabDef.label}`)
       : typeof tabDef.macroName === "string" && tabDef.macroName.length
         ? tabDef.macroName
-        : `FX Bus - ${tabDef.label} - ${timeTag}`;
+        : `FX Bus - ${tabDef.label} - ${dateTag} ${timeTag}`;
 
-  const macroSource = fxbusBuildMacroSource(macroName, payload, { requireGM: true });
+  const macroSource = fxbusBuildMacroSource(macroName, payload, {
+    requireGM: true,
+    meta: getMacroMeta()
+  });
 
   try {
     await fxbusCopyTextToClipboard(macroSource);
@@ -347,13 +359,16 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const requestedTab = this._requestedStartTab;
     const rememberedTab =
       typeof this._state.__activeTab === "string" ? this._state.__activeTab : null;
-    const fallbackTab = this._tabs[0]?.id ?? "osc";
-    this._activeTab = requestedTab ?? rememberedTab ?? fallbackTab;
 
+    // Exclude "reset" from the normal tabs list (it is rendered as a separate red tab)
+    const normalTabs = this._tabs.filter((t) => t?.id !== "reset");
+    const fallbackTab = normalTabs[0]?.id ?? "osc";
+
+    this._activeTab = requestedTab ?? rememberedTab ?? fallbackTab;
     this._requestedStartTab = null;
 
     return {
-      tabs: this._tabs.map((t) => ({ id: t.id, label: t.label })),
+      tabs: normalTabs.map((t) => ({ id: t.id, label: t.label })),
       activeTab: this._activeTab
     };
   }
@@ -374,7 +389,6 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     wireStatePersistence(root);
-
     setActiveTab(root, this._activeTab);
 
     try {
