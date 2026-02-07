@@ -3,15 +3,14 @@
 /**
  * FX Bus - Scene Controls (Foundry v13)
  *
- * Fixes:
- * - Prevents token interaction lock-ups: FX Bus control now keeps a hidden "select" tool as the active tool,
- *   so normal token selection/dragging remains functional even while FX Bus is the active control.
- * - Clicking the lightning bolt never opens the popout: the active tool is inert "select".
- * - Clicking an FX Bus tool opens the popout, then immediately returns the active tool to hidden "select"
- *   to avoid breaking token clicks/movement.
- * - No duplicate lightning bolt: hidden tool is not a bolt icon and is button:false.
- * - No undefined.onChange: activeTool always points to a real, present tool.
- * - Prevents duplicate injection across hot reloads by replacing the existing hook.
+ * Fix:
+ * - v13 removed/changed ui.controls.activateTool; use ui.controls.activate(...) instead.
+ * - Keeps FX Bus control selected while forcing the active tool back to Token layer "select"
+ *   so token selection/dragging remains functional.
+ *
+ * Behaviour:
+ * - Clicking FX Bus tools opens the panel, then immediately restores SAFE_TOOL.
+ * - SAFE_TOOL is hidden (button:false) so no duplicate bolt/tool appears.
  */
 
 import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
@@ -33,13 +32,33 @@ function resetAll() {
   runtime.emit({ action: "fx.bus.reset" });
 }
 
+/**
+ * Activate a specific control+tool in a Foundry-v13-safe way.
+ * Falls back to older APIs if present (best-effort).
+ */
+async function activateControlTool(controlName, toolName) {
+  const controlsUi = ui?.controls;
+  if (!controlsUi) return;
+
+  // v13+ API
+  if (typeof controlsUi.activate === "function") {
+    await controlsUi.activate({ control: controlName, tool: toolName });
+    return;
+  }
+
+  // Best-effort legacy fallbacks (if running under older core)
+  if (typeof controlsUi.activateControl === "function") controlsUi.activateControl(controlName);
+  if (typeof controlsUi.activateTool === "function") controlsUi.activateTool(toolName);
+}
+
 function restoreSafeTool() {
   try {
-    // Keep FX Bus control selected, but restore tool to SAFE_TOOL so token interaction remains normal.
     queueMicrotask(() => {
       if (!ui?.controls) return;
       if (ui.controls.control?.name !== CONTROL_NAME) return;
-      ui.controls.activateTool(SAFE_TOOL);
+
+      // Keep FX Bus control selected, but restore tool to SAFE_TOOL so token interaction remains normal.
+      void activateControlTool(CONTROL_NAME, SAFE_TOOL);
     });
   } catch {
     // ignore

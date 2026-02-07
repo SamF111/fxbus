@@ -1,12 +1,14 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\ticker.js
+
 /**
- * FX Bus (Foundry VTT v12+)
+ * FX Bus (Foundry VTT v13+)
  * Shared ticker management utilities.
  *
  * Design:
  * - Exactly one canvas.app.ticker callback per effect type.
- * - If an effect is "re-started" or "updated", its ticker callback is replaced to avoid stale closures.
- * - Any uncaught error inside an effect tick forcibly removes that effect ticker to prevent hard lock states.
- * - Delta time derived from ticker.deltaMS for deterministic motion.
+ * - If an effect is re-started/updated, its ticker callback is replaced to avoid stale closures.
+ * - Any uncaught error inside an effect tick forcibly removes that effect ticker to prevent lock states.
+ * - Delta time derived from ticker.deltaMS for consistent motion.
  */
 
 function getTicker() {
@@ -29,10 +31,6 @@ function getTicker() {
  * @param {(deltaMS:number)=>void} tickFn
  */
 export function ensureTicker(runtime, effectName, tickFn) {
-  /**
-   * Always replace existing ticker for this effectName.
-   * This avoids subtle bugs where an earlier closure keeps running after a "Start / Update".
-   */
   const ticker = getTicker();
 
   const prev = runtime.tickers.get(effectName);
@@ -45,12 +43,10 @@ export function ensureTicker(runtime, effectName, tickFn) {
     runtime.tickers.delete(effectName);
   }
 
-  const wrapped = (delta) => {
-    /**
-     * PIXI ticker passes a delta scalar (frames at 60 fps) as `delta`.
-     * Foundry exposes deterministic deltaMS on the ticker instance.
-     */
-    const deltaMS = ticker.deltaMS ?? (Number(delta) * (1000 / 60));
+  const wrapped = (_deltaScalar) => {
+    // Foundry/PIXI expose deltaMS on the ticker. Fallback assumes 60 FPS if missing.
+    const raw = ticker.deltaMS;
+    const deltaMS = Number.isFinite(raw) ? raw : (1000 / 60);
 
     try {
       tickFn(deltaMS);
@@ -71,11 +67,6 @@ export function ensureTicker(runtime, effectName, tickFn) {
  * @param {string} effectName
  */
 export function cleanupTicker(runtime, effectName) {
-  /**
-   * Remove is idempotent:
-   * - If the wrapped fn is absent, no action.
-   * - Safe to call from inside a failing tick.
-   */
   const wrapped = runtime.tickers.get(effectName);
   if (!wrapped) return;
 
