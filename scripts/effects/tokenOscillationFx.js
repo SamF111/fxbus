@@ -3,46 +3,21 @@
 /**
  * FX Bus - Token Oscillation FX (Foundry VTT v13+)
  *
- * Purpose:
- * - Apply a gentle, vehicle-like motion (roll + bob + sway) to specific tokens.
- * - Runs entirely client-side via PIXI transforms. No document updates.
+ * Compatibility goals:
+ * - Drag-safe: never touch token.x/y or the Token container position.
+ * - Z Scatter-safe: do not reparent token.mesh/icon, and do not animate position.
  *
- * Core drag-safety constraint:
- * - NEVER write to token.x / token.y / token.position (world-space container motion).
- * - Foundry owns token world movement (dragging, snapping, ruler movement).
+ * Implementation:
+ * - Animate ONLY:
+ *   - target.pivot (bob/sway)  -> visual offset without touching position.
+ *   - target.rotation (roll)
+ * - Snapshot + restore:
+ *   - pivot, rotation, scale
+ *   - visible/renderable/alpha (prevents "stuck invisible" if another module toggles state and never restores due to transform contention)
  *
- * What we *do* animate:
- * - A render child display object: token.mesh (preferred) or token.icon (fallback).
- *
- * Why the earlier "local-only" approach can fail:
- * - In v13, the rendered sprite may not be parented directly to the Token container.
- * - If the render object is in WORLD space (not token-local), writing "local offsets"
- *   pins the sprite while the selection border (token container) moves.
- *
- * Therefore we support two coordinate modes:
- * - LOCAL mode: target.parent === token
- *   - target.position is local to token; apply offsets directly.
- * - WORLD mode: target.parent !== token
- *   - target.position is in the same space as token.x/y; drive target.position
- *     from token.x/y each frame plus a cached offset.
- *
- * Actions:
- * - fx.tokenOsc.start: start oscillation for tokenIds (creates per-token state + baseline)
- * - fx.tokenOsc.update: update parameters for existing oscillation entries
- * - fx.tokenOsc.stop: stop oscillation for tokenIds (restore baseline exactly)
- *
- * Parameters (payload fields):
- * - tokenIds: string[]
- * - rollDeg: number (default 3)          - peak roll in degrees
- * - bobPx: number (default 2)            - peak vertical offset in pixels
- * - swayPx: number (default 1)           - peak horizontal offset in pixels
- * - freqHz: number (default 0.7)         - oscillation frequency in Hz
- * - noise: number (default 0)            - bounded micro-jitter amplitude multiplier (0-0.5 recommended)
- * - randomPhase: boolean (default true)  - per-token phase offset
- *
- * Determinism:
- * - No runtime RNG after state creation.
- * - Phase and noise are derived deterministically from tokenId.
+ * Notes:
+ * - Enforcing baseline visibility during oscillation may override other modules that intentionally hide the mesh
+ *   while the effect is running. This is deliberate to eliminate the permanent-invisible failure mode.
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
@@ -54,12 +29,12 @@ const ACTION_START = "fx.tokenOsc.start";
 const ACTION_UPDATE = "fx.tokenOsc.update";
 const ACTION_STOP = "fx.tokenOsc.stop";
 
-// FNV-1a 32-bit hash constants (Fowler–Noll–Vo)
-const FNV_OFFSET_BASIS_32 = 0x811c9dc5; // 2166136261
-const FNV_PRIME_32 = 0x01000193; // 16777619
+// FNV-1a 32-bit hash constants
+const FNV_OFFSET_BASIS_32 = 0x811c9dc5;
+const FNV_PRIME_32 = 0x01000193;
 const UINT32_MAX_PLUS_ONE = 2 ** 32;
 
-// Noise harmonic and mixing constants (design choices; normalised to keep output in [-1, 1])
+// Noise harmonic and mixing constants
 const NOISE_FREQ_A = 17.0;
 const NOISE_FREQ_B = 29.0;
 const NOISE_FREQ_C = 41.0;
@@ -69,7 +44,7 @@ const NOISE_W_B = 0.6;
 const NOISE_W_C = 0.3;
 const NOISE_W_SUM = NOISE_W_A + NOISE_W_B + NOISE_W_C;
 
-// Jitter projection (design choices)
+// Jitter projection
 const JITTER_X = 0.8;
 const JITTER_Y = 0.6;
 const JITTER_ROT = 0.15;
@@ -90,24 +65,19 @@ export function registerTokenOscillationFx(runtime) {
 /**
  * Retrieve the per-effect state map for this runtime.
  *
- * Shape:
- * - Map(tokenId -> {
- *     tokenId,
- *     base,      // baseline transform descriptor (local or world mode)
- *     params,    // oscillation parameters
- *     phase,     // deterministic phase offset
- *     t          // elapsed seconds since effect started
- *   })
+ * @param {object} runtime
+ * @returns {Map<string, object>}
  */
 function getEffectMap(runtime) {
-  if (!runtime.tokenFx.has(EFFECT_NAME)) {
-    runtime.tokenFx.set(EFFECT_NAME, new Map()); // Map(tokenId -> state)
-  }
+  if (!runtime.tokenFx.has(EFFECT_NAME)) runtime.tokenFx.set(EFFECT_NAME, new Map());
   return runtime.tokenFx.get(EFFECT_NAME);
 }
 
 /**
  * Parse and clamp incoming parameters from the bus payload.
+ *
+ * @param {object} msg
+ * @returns {object}
  */
 function normaliseParams(msg) {
   const rollDeg = Number.isFinite(msg.rollDeg) ? msg.rollDeg : 3;
@@ -129,6 +99,9 @@ function normaliseParams(msg) {
 
 /**
  * Defensive tokenId normalisation.
+ *
+ * @param {unknown} value
+ * @returns {string[]}
  */
 function asTokenIds(value) {
   if (!Array.isArray(value)) return [];
@@ -136,16 +109,8 @@ function asTokenIds(value) {
 }
 
 /**
- * Resolve the render object that should receive oscillation.
- *
- * IMPORTANT:
- * - This must NOT be the Token container itself.
- * - We must operate on a rendered child so we do not interfere with Foundry’s
- *   ownership of token world-space movement during drag operations.
- *
- * Preference order:
- * 1) token.mesh  (v13 primary render mesh; preferred)
- * 2) token.icon  (fallback for older / edge cases)
+ * Resolve the render object to animate.
+ * Do not reparent it.
  *
  * @param {Token} token
  * @returns {PIXI.DisplayObject|null}
@@ -155,92 +120,51 @@ function getTokenOscTarget(token) {
 }
 
 /**
- * Snapshot a baseline transform for the target in a drag-safe way.
+ * Snapshot baseline transform + render-state for the target.
  *
- * Two modes are detected automatically:
- *
- * LOCAL mode (target.parent === token):
- * - target.position is token-local.
- * - We store localX/localY and reapply around those values each tick.
- *
- * WORLD mode (target.parent !== token):
- * - target.position is in world space (same coordinate space as token.x/y).
- * - We store dx/dy = (target.position - token.x/y).
- * - Each tick we set target.position = token.x/y + dx/dy + oscillation offsets.
- *
- * Rotation and scale are always stored/restored directly on the target.
- *
- * @param {Token} token
  * @param {PIXI.DisplayObject} target
- * @returns {object|null} baseline descriptor
+ * @returns {object|null}
  */
-function snapshotTargetBase(token, target) {
-  if (!token || !target) return null;
+function snapshotBase(target) {
+  if (!target) return null;
+
+  const pivotX = Number.isFinite(target.pivot?.x) ? target.pivot.x : 0;
+  const pivotY = Number.isFinite(target.pivot?.y) ? target.pivot.y : 0;
 
   const rotation = Number.isFinite(target.rotation) ? target.rotation : 0;
+
   const scaleX = Number.isFinite(target.scale?.x) ? target.scale.x : 1;
   const scaleY = Number.isFinite(target.scale?.y) ? target.scale.y : 1;
 
-  const isLocal = target.parent === token;
-
-  if (isLocal) {
-    const localX = Number.isFinite(target.position?.x) ? target.position.x : 0;
-    const localY = Number.isFinite(target.position?.y) ? target.position.y : 0;
-
-    return {
-      mode: "local",
-      localX,
-      localY,
-      rotation,
-      scaleX,
-      scaleY
-    };
-  }
-
-  // WORLD mode: treat target.position as world-space, anchored to token.x/y.
-  const worldX = Number.isFinite(target.position?.x) ? target.position.x : token.x;
-  const worldY = Number.isFinite(target.position?.y) ? target.position.y : token.y;
+  const visible = typeof target.visible === "boolean" ? target.visible : true;
+  const renderable = typeof target.renderable === "boolean" ? target.renderable : true;
+  const alpha = Number.isFinite(target.alpha) ? target.alpha : 1;
 
   return {
-    mode: "world",
-    dx: worldX - token.x,
-    dy: worldY - token.y,
+    pivotX,
+    pivotY,
     rotation,
     scaleX,
-    scaleY
+    scaleY,
+    visible,
+    renderable,
+    alpha
   };
 }
 
 /**
- * Restore the target to its exact baseline transform.
+ * Restore baseline.
  *
- * Drag-safe by construction:
- * - token.x/y are never modified
- * - WORLD mode restoration anchors to token’s *current* x/y, so restoration remains correct
- *   even if the token was dragged while oscillating.
- *
- * @param {Token} token
  * @param {PIXI.DisplayObject} target
  * @param {object} base
  */
-function restoreTargetBase(token, target, base) {
-  if (!token || !target || !base) return;
+function restoreBase(target, base) {
+  if (!target || !base) return;
 
-  if (base.mode === "local") {
-    if (target.position?.set) target.position.set(base.localX, base.localY);
-    else {
-      target.position.x = base.localX;
-      target.position.y = base.localY;
-    }
-  } else {
-    const x = token.x + base.dx;
-    const y = token.y + base.dy;
-
-    if (target.position?.set) target.position.set(x, y);
-    else {
-      target.position.x = x;
-      target.position.y = y;
-    }
+  if (target.pivot?.set) target.pivot.set(base.pivotX, base.pivotY);
+  else {
+    target.pivot.x = base.pivotX;
+    target.pivot.y = base.pivotY;
   }
 
   target.rotation = base.rotation;
@@ -250,14 +174,21 @@ function restoreTargetBase(token, target, base) {
     target.scale.x = base.scaleX;
     target.scale.y = base.scaleY;
   }
+
+  target.visible = base.visible;
+  target.renderable = base.renderable;
+  target.alpha = base.alpha;
 }
 
 /**
- * Deterministic pseudo-noise in [-1, 1], based on tokenId and time.
- * No RNG; uses sum of sines with explicit multiples of Math.PI.
+ * Deterministic pseudo-noise in [-1, 1].
+ *
+ * @param {string} tokenId
+ * @param {number} tSeconds
+ * @returns {number}
  */
 function noise1(tokenId, tSeconds) {
-  const seed = hashStringToUnit(tokenId); // [0,1)
+  const seed = hashStringToUnit(tokenId);
 
   const TWO_PI = 2 * Math.PI;
   const FOUR_PI = 4 * Math.PI;
@@ -272,8 +203,9 @@ function noise1(tokenId, tSeconds) {
 
 /**
  * FNV-1a 32-bit hash -> unit interval [0, 1)
- * - offset basis and prime are fixed by the FNV specification
- * - mapping to [0,1) is an adaptation for phase/noise seeding
+ *
+ * @param {string} str
+ * @returns {number}
  */
 function hashStringToUnit(str) {
   let h = FNV_OFFSET_BASIS_32;
@@ -288,7 +220,10 @@ function hashStringToUnit(str) {
 
 /**
  * Phase is deterministic from tokenId unless randomPhase=false.
- * This gives a stable, non-synchronised "fleet" motion for many tokens.
+ *
+ * @param {string} tokenId
+ * @param {boolean} randomPhase
+ * @returns {number}
  */
 function pickPhase(tokenId, randomPhase) {
   if (!randomPhase) return 0;
@@ -309,7 +244,6 @@ function onStart(runtime, msg) {
     const target = getTokenOscTarget(token);
     if (!target) continue;
 
-    // Update existing entry rather than re-snapshotting baseline.
     const existing = fxMap.get(tokenId);
     if (existing) {
       existing.params = params;
@@ -317,8 +251,7 @@ function onStart(runtime, msg) {
       continue;
     }
 
-    // Snapshot baseline once at start.
-    const base = snapshotTargetBase(token, target);
+    const base = snapshotBase(target);
     if (!base) continue;
 
     fxMap.set(tokenId, {
@@ -330,9 +263,7 @@ function onStart(runtime, msg) {
     });
   }
 
-  if (fxMap.size > 0) {
-    ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
-  }
+  if (fxMap.size > 0) ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
 }
 
 function onUpdate(runtime, msg) {
@@ -364,23 +295,25 @@ function onStop(runtime, msg) {
     const token = canvas?.tokens?.get(tokenId);
     if (token) {
       const target = getTokenOscTarget(token);
-      if (target) restoreTargetBase(token, target, state.base);
+      if (target) restoreBase(target, state.base);
     }
 
     fxMap.delete(tokenId);
   }
 
-  if (fxMap.size === 0) {
-    cleanupTicker(runtime, EFFECT_NAME);
-  }
+  if (fxMap.size === 0) cleanupTicker(runtime, EFFECT_NAME);
 }
 
 /**
- * Per-frame oscillation update.
+ * Per-frame update.
  *
- * Key property:
- * - In WORLD mode, the sprite is re-anchored to token.x/y each frame, so it follows
- *   the token while dragging without us ever mutating token.x/y.
+ * Enforced invariants while active:
+ * - target.visible/renderable/alpha pinned to baseline to avoid “perma-invisible” after overlap resolution.
+ * - position untouched (no bob/sway in position).
+ * - bob/sway applied via pivot; roll via rotation.
+ *
+ * @param {object} runtime
+ * @param {number} deltaMS
  */
 function tick(runtime, deltaMS) {
   const fxMap = getEffectMap(runtime);
@@ -402,13 +335,9 @@ function tick(runtime, deltaMS) {
 
     const { base, params, phase } = state;
 
-    // Angular frequency for a sinusoid: w = 2πf
     const w = 2 * Math.PI * params.freqHz;
     const t = state.t;
 
-    // Use sin/cos for phase-shifted components:
-    // - roll and sway follow sin
-    // - bob follows cos (90° out of phase) so the motion feels like suspension
     const s = Math.sin(w * t + phase);
     const c = Math.cos(w * t + phase);
 
@@ -416,33 +345,26 @@ function tick(runtime, deltaMS) {
     const bob = params.bobPx * c;
     const sway = params.swayPx * s;
 
-    // Optional deterministic jitter scaled by noise parameter.
     const n = params.noise > 0 ? noise1(state.tokenId, t) * params.noise : 0;
     const jx = n * JITTER_X;
     const jy = n * JITTER_Y;
     const jr = n * JITTER_ROT;
 
-    if (base.mode === "local") {
-      // LOCAL MODE: apply offsets relative to cached local baseline.
-      if (target.position?.set) {
-        target.position.set(base.localX + sway + jx, base.localY + bob + jy);
-      } else {
-        target.position.x = base.localX + sway + jx;
-        target.position.y = base.localY + bob + jy;
-      }
-    } else {
-      // WORLD MODE: anchor to token.x/y every frame so dragging remains correct.
-      const x = token.x + base.dx + sway + jx;
-      const y = token.y + base.dy + bob + jy;
+    // Pin render-state to baseline while effect is active.
+    target.visible = base.visible;
+    target.renderable = base.renderable;
+    target.alpha = base.alpha;
 
-      if (target.position?.set) target.position.set(x, y);
-      else {
-        target.position.x = x;
-        target.position.y = y;
-      }
+    // Pivot offsets (invert sign because pivot moves the content opposite).
+    const pivotX = base.pivotX - (sway + jx);
+    const pivotY = base.pivotY - (bob + jy);
+
+    if (target.pivot?.set) target.pivot.set(pivotX, pivotY);
+    else {
+      target.pivot.x = pivotX;
+      target.pivot.y = pivotY;
     }
 
-    // Rotation and scale always apply directly to the target.
     target.rotation = base.rotation + roll + jr;
 
     if (target.scale?.set) target.scale.set(base.scaleX, base.scaleY);
