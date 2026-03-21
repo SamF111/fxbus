@@ -7,7 +7,9 @@
  * - Remove dead contentHtml/renderTemplate path: Option A renders via partial in fxbus-panel.hbs.
  * - Align button selectors with template (data-action="pulseStart"/"pulseStop").
  * - Add colour pair wiring (expects pulseColourPicker + pulseColour in the HBS).
- * - Emit parameters that actually exist in the HBS (no phantom fields).
+ * - Emit parameters that actually exist in the HBS.
+ * - Support pulse/static mode for the updated screenPulse effect.
+ * - Force a default mode when persisted uiState contains an empty value.
  * - Remove "Test local".
  *
  * Copy-to-macro support:
@@ -39,7 +41,13 @@ export function screenPulseTabDef() {
 
       const until = panel.querySelector('input[name="pulseUntilStopped"]');
       const dur = panel.querySelector('input[name="pulseDurationMs"]');
+      const modeEl = panel.querySelector('select[name="pulseMode"]');
 
+      if (modeEl && !modeEl.value) {
+        modeEl.value = "pulse";
+      }
+
+      const mode = String(modeEl?.value ?? "pulse").trim().toLowerCase();
       const durationMs = until?.checked ? 0 : num(dur?.value, 1500);
 
       return {
@@ -48,13 +56,18 @@ export function screenPulseTabDef() {
           panel.querySelector('input[name="pulseColour"]')?.value,
           "#ff0000"
         ),
+        mode: mode === "static" ? "static" : "pulse",
         durationMs,
+        alpha: num(panel.querySelector('input[name="pulseAlpha"]')?.value, 0.35),
         freqHz: num(panel.querySelector('input[name="pulseFreqHz"]')?.value, 2),
         minAlpha: num(panel.querySelector('input[name="pulseMinAlpha"]')?.value, 0),
         maxAlpha: num(panel.querySelector('input[name="pulseMaxAlpha"]')?.value, 0.35),
-        intensity: num(panel.querySelector('input[name="pulseIntensity"]')?.value, 1.0),
-        shape: String(panel.querySelector('select[name="pulseShape"]')?.value ?? "sine"),
-        ease: String(panel.querySelector('select[name="pulseEase"]')?.value ?? "inOut"),
+        shape: String(
+          panel.querySelector('select[name="pulseShape"]')?.value ?? "sine"
+        ),
+        ease: String(
+          panel.querySelector('select[name="pulseEase"]')?.value ?? "inOut"
+        ),
         blendMode: String(
           panel.querySelector('select[name="pulseBlendMode"]')?.value ?? "SCREEN"
         )
@@ -72,11 +85,39 @@ export function screenPulseTabDef() {
 
       const until = panel.querySelector('input[name="pulseUntilStopped"]');
       const dur = panel.querySelector('input[name="pulseDurationMs"]');
+      const mode = panel.querySelector('select[name="pulseMode"]');
+      const alpha = panel.querySelector('input[name="pulseAlpha"]');
+      const freqHz = panel.querySelector('input[name="pulseFreqHz"]');
+      const minAlpha = panel.querySelector('input[name="pulseMinAlpha"]');
+      const maxAlpha = panel.querySelector('input[name="pulseMaxAlpha"]');
+      const shape = panel.querySelector('select[name="pulseShape"]');
+
+      if (mode && !mode.value) {
+        mode.value = "pulse";
+      }
+
+      const syncDuration = () => {
+        if (until && dur) setDisabled(dur, Boolean(until.checked));
+      };
+
+      const syncMode = () => {
+        const isStatic = String(mode?.value ?? "pulse").trim().toLowerCase() === "static";
+
+        setDisabled(alpha, !isStatic);
+        setDisabled(freqHz, isStatic);
+        setDisabled(minAlpha, isStatic);
+        setDisabled(maxAlpha, isStatic);
+        setDisabled(shape, isStatic);
+      };
 
       if (until && dur) {
-        const sync = () => setDisabled(dur, Boolean(until.checked));
-        until.addEventListener("change", sync);
-        sync();
+        until.addEventListener("change", syncDuration);
+        syncDuration();
+      }
+
+      if (mode) {
+        mode.addEventListener("change", syncMode);
+        syncMode();
       }
 
       function stop() {

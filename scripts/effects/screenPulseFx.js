@@ -1,19 +1,25 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\effects\screenPulseFx.js
+
 /**
  * FX Bus - Screen Pulse FX (Foundry VTT v12+)
  *
  * Purpose:
  * - Pulse a full-screen colour overlay for a fixed duration or indefinitely until stopped.
+ * - Also supports a static full-screen overlay mode.
  * - Runs entirely client-side. No document updates.
  *
  * Actions:
- * - fx.screenPulse.start: start a pulse (overwrites any existing active pulse state)
+ * - fx.screenPulse.start: start a pulse/static overlay (overwrites any existing active pulse state)
  * - fx.screenPulse.stop: stop immediately and remove the overlay
  *
  * Parameters (payload fields):
- * - colour: string hex (default "#ff0000") - "#RRGGBB" or "#RRGGBBAA" (alpha ignored, use minAlpha/maxAlpha)
+ * - colour: string hex (default "#ff0000") - "#RRGGBB" or "#RRGGBBAA" (alpha ignored, use alpha/minAlpha/maxAlpha)
+ * - mode: "pulse" | "static" (default "pulse")
  * - durationMs: number (default 1500)
  *     - If 0: run indefinitely until fx.screenPulse.stop or fx.bus.reset
  *     - Else: clamped to [1, 60000]
+ * - alpha: number 0-1 (default 0.35)
+ *     - Used only in static mode
  * - freqHz: number (default 2.0)
  * - maxAlpha: number 0-1 (default 0.35)
  * - minAlpha: number 0-1 (default 0.0)
@@ -44,9 +50,13 @@ export function registerScreenPulseFx(runtime) {
 function normaliseParams(msg) {
   const colour = typeof msg.colour === "string" ? msg.colour.trim() : "#ff0000";
 
+  const modeRaw = typeof msg.mode === "string" ? msg.mode.trim().toLowerCase() : "pulse";
+  const mode = modeRaw === "static" ? "static" : "pulse";
+
   const durationMsRaw = Number.isFinite(msg.durationMs) ? msg.durationMs : 1500;
   const durationMs = durationMsRaw === 0 ? 0 : clamp(durationMsRaw, 1, 60000);
 
+  const alpha = Number.isFinite(msg.alpha) ? msg.alpha : 0.35;
   const freqHz = Number.isFinite(msg.freqHz) ? msg.freqHz : 2.0;
 
   const maxAlpha = Number.isFinite(msg.maxAlpha) ? msg.maxAlpha : 0.35;
@@ -54,12 +64,14 @@ function normaliseParams(msg) {
 
   const shape = msg.shape === "triangle" ? "triangle" : "sine";
 
-  const blendMode = (typeof msg.blendMode === "string" ? msg.blendMode.trim().toUpperCase() : "SCREEN");
-  const ease = (typeof msg.ease === "string" ? msg.ease.trim().toLowerCase() : "inout");
+  const blendMode = typeof msg.blendMode === "string" ? msg.blendMode.trim().toUpperCase() : "SCREEN";
+  const ease = typeof msg.ease === "string" ? msg.ease.trim().toLowerCase() : "inout";
 
   return {
     colour,
+    mode,
     durationMs,
+    alpha: clamp(alpha, 0, 1),
     freqHz: clamp(freqHz, 0.1, 30),
     maxAlpha: clamp(maxAlpha, 0, 1),
     minAlpha: clamp(minAlpha, 0, 1),
@@ -250,14 +262,20 @@ function tick(runtime, deltaMS) {
   const t01 = params.durationMs === 0 ? 0 : clamp(elapsedMs / params.durationMs, 0, 1);
   const env = params.durationMs === 0 ? 1 : envelope(params.ease, t01);
 
-  const phase01 = (elapsedMs / 1000) * params.freqHz;
-  const wv = wave(params.shape, phase01);
+  let baseAlpha = 0;
 
-  const minA = Math.min(params.minAlpha, params.maxAlpha);
-  const maxA = Math.max(params.minAlpha, params.maxAlpha);
-  const oscAlpha = minA + (maxA - minA) * wv;
+  if (params.mode === "static") {
+    baseAlpha = params.alpha;
+  } else {
+    const phase01 = (elapsedMs / 1000) * params.freqHz;
+    const wv = wave(params.shape, phase01);
 
-  overlay.alpha = clamp(oscAlpha * env, 0, 1);
+    const minA = Math.min(params.minAlpha, params.maxAlpha);
+    const maxA = Math.max(params.minAlpha, params.maxAlpha);
+    baseAlpha = minA + (maxA - minA) * wv;
+  }
+
+  overlay.alpha = clamp(baseAlpha * env, 0, 1);
   overlay.blendMode = resolveBlendMode(params.blendMode);
 
   if (params.durationMs !== 0 && elapsedMs >= params.durationMs) {
