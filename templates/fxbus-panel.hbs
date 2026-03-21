@@ -193,6 +193,14 @@
   </section>
 
   <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'monochrome')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="monochrome"
+  >
+    {{> "modules/fxbus/templates/tabs/screenMonochromeTab.hbs"}}
+  </section>
+
+  <section
     class="tab fxbus-panel-section {{#if (eq activeTab 'reset')}}active{{/if}}"
     data-group="fxbus"
     data-tab="reset"

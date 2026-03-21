@@ -32,6 +32,7 @@ import { screenNoiseTabDef } from "./tabs/screenNoiseTab.js";
 import { screenBlurTabDef } from "./tabs/screenBlurTab.js";
 import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
+import { screenMonochromeTabDef } from "./tabs/screenMonochromeTab.js";
 import { resetTabDef } from "./tabs/resetTab.js";
 
 import {
@@ -55,6 +56,7 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/screenBlurTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenSmearTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenStreakTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenMonochromeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/resetTab.hbs`
 ];
 
@@ -96,6 +98,7 @@ function buildTabs() {
     screenBlurTabDef(),
     screenSmearTabDef(),
     screenStreakTabDef(),
+    screenMonochromeTabDef(),
     resetTabDef()
   ];
 }
@@ -292,10 +295,9 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
     return;
   }
 
-  // Use date in the name, not just time. Keep filesystem-safe-ish for copy/paste.
-  const iso = new Date().toISOString(); // 2026-02-07T13:56:32.123Z
-  const dateTag = iso.slice(0, 10); // 2026-02-07
-  const timeTag = iso.slice(11, 19).replace(/:/g, "-"); // 13-56-32
+  const iso = new Date().toISOString();
+  const dateTag = iso.slice(0, 10);
+  const timeTag = iso.slice(11, 19).replace(/:/g, "-");
 
   const macroName =
     typeof tabDef.macroName === "function"
@@ -360,7 +362,6 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const rememberedTab =
       typeof this._state.__activeTab === "string" ? this._state.__activeTab : null;
 
-    // Exclude "reset" from the normal tabs list (it is rendered as a separate red tab)
     const normalTabs = this._tabs.filter((t) => t?.id !== "reset");
     const fallbackTab = normalTabs[0]?.id ?? "osc";
 

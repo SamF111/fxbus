@@ -1,0 +1,95 @@
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Contrast</label>
+    <input
+      type="number"
+      name="monoContrast"
+      value="1.35"
+      step="0.05"
+      min="0"
+      max="4"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Brightness</label>
+    <input
+      type="number"
+      name="monoBrightness"
+      value="0.92"
+      step="0.05"
+      min="0"
+      max="3"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Strength</label>
+  <input
+    type="number"
+    name="monoAlpha"
+    value="1.0"
+    step="0.05"
+    min="0"
+    max="1"
+  />
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Fade In (ms)</label>
+    <input
+      type="number"
+      name="monoFadeInMs"
+      value="300"
+      step="50"
+      min="0"
+      max="10000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Fade Out (ms)</label>
+    <input
+      type="number"
+      name="monoFadeOutMs"
+      value="300"
+      step="50"
+      min="0"
+      max="10000"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="monoUntilStopped"/>
+    Run until stopped
+  </label>
+</div>
+
+<div class="form-group">
+  <label>Duration (ms)</label>
+  <input
+    type="number"
+    name="monoDurationMs"
+    value="0"
+    step="100"
+    min="0"
+    max="60000"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" data-action="monoStart">Start</button>
+  <button type="button" data-action="monoUpdate" class="fxbus-smallbtn">Update</button>
+  <button type="button" data-action="monoStop" class="fxbus-smallbtn">Stop</button>
+  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+</div>
+
+<p class="fxbus-muted">
+  Applies a noir-style monochrome filter to all clients.
+</p>

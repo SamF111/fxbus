@@ -13,6 +13,7 @@ import { registerScreenNoiseFx } from "./screenNoiseFx.js";
 import { registerScreenBlurFx } from "./screenBlurFx.js";
 import { registerScreenSmearFx } from "./screenSmearFx.js";
 import { registerScreenStreakFx } from "./screenStreakFx.js";
+import { registerScreenMonochromeFx } from "./screenMonochromeFx.js";
 import { registerFxbusResetFx } from "./fxbusResetFx.js";
 
 export function registerBuiltInEffects(runtime) {
@@ -25,5 +26,6 @@ export function registerBuiltInEffects(runtime) {
   registerScreenBlurFx(runtime);
   registerScreenSmearFx(runtime);
   registerScreenStreakFx(runtime);
+  registerScreenMonochromeFx(runtime);
   registerFxbusResetFx(runtime);
 }

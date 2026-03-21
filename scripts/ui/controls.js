@@ -108,6 +108,7 @@ function makeFxbusControlArrayShape() {
     makeTool("fxbus-blur", "Screen Blur", "fas fa-eye-slash", () => openTab("blur")),
     makeTool("fxbus-smear", "Screen Smear", "fas fa-water", () => openTab("smear")),
     makeTool("fxbus-streak", "Screen Streak", "fas fa-wind", () => openTab("streak")),
+    makeTool("fxbus-monochrome", "Monochrome", "fas fa-film", () => openTab("monochrome")),
     makeTool("fxbus-reset", "Reset All FX", "fas fa-ban", () => resetAll())
   ];
 
@@ -146,6 +147,7 @@ function makeFxbusControlObjectShape() {
       "fxbus-blur": makeTool("fxbus-blur", "Screen Blur", "fas fa-eye-slash", () => openTab("blur")),
       "fxbus-smear": makeTool("fxbus-smear", "Screen Smear", "fas fa-water", () => openTab("smear")),
       "fxbus-streak": makeTool("fxbus-streak", "Screen Streak", "fas fa-wind", () => openTab("streak")),
+      "fxbus-monochrome": makeTool("fxbus-monochrome", "Monochrome", "fas fa-film", () => openTab("monochrome")),
       "fxbus-reset": makeTool("fxbus-reset", "Reset All FX", "fas fa-ban", () => resetAll())
     }
   };
