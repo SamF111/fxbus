@@ -34,6 +34,7 @@ const NOISE_STOP = "fx.noise.stop";
 const SCREEN_BLUR_STOP = "fx.screenBlur.stop";
 const SCREEN_SMEAR_STOP = "fx.screenSmear.stop";
 const SCREEN_STREAK_STOP = "fx.screenStreak.stop";
+const SCREEN_MONOCHROME_STOP = "fx.screenMonochrome.stop";
 
 export function registerFxbusResetFx(runtime) {
   if (!runtime?.handlers) throw new Error("[FX Bus] fxbusResetFx: invalid runtime.");
@@ -46,6 +47,7 @@ function safeCallHandler(runtime, action, payload) {
     console.warn("[FX Bus] reset: missing handler", { action });
     return;
   }
+
   try {
     fn(payload ?? { action });
   } catch (err) {
@@ -62,8 +64,11 @@ function collectAllTokenIds(runtime) {
 
   for (const fxMap of runtime.tokenFx.values()) {
     if (!(fxMap instanceof Map)) continue;
+
     for (const tokenId of fxMap.keys()) {
-      if (typeof tokenId === "string" && tokenId.length > 0) ids.add(tokenId);
+      if (typeof tokenId === "string" && tokenId.length > 0) {
+        ids.add(tokenId);
+      }
     }
   }
 
@@ -106,6 +111,10 @@ function onReset(runtime) {
   stopIfPresent(runtime, SCREEN_BLUR_STOP);
   stopIfPresent(runtime, SCREEN_SMEAR_STOP);
   stopIfPresent(runtime, SCREEN_STREAK_STOP);
+  stopIfPresent(runtime, SCREEN_MONOCHROME_STOP, {
+    action: SCREEN_MONOCHROME_STOP,
+    immediate: true
+  });
 
   // 3) Backstop cleanup: remove any remaining tickers and clear maps.
   backstopTickerCleanup(runtime);

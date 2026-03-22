@@ -22,6 +22,8 @@
  * - contrast: number (default 1.35)
  * - brightness: number (default 0.92)
  * - alpha: number 0-1 (default 1.0)
+ * - immediate: boolean (stop only)
+ *     - true = destroy immediately without fade-out
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
@@ -39,7 +41,7 @@ export function registerScreenMonochromeFx(runtime) {
   }
 
   runtime.handlers.set(ACTION_START, (msg) => onStart(runtime, msg));
-  runtime.handlers.set(ACTION_STOP, () => onStop(runtime));
+  runtime.handlers.set(ACTION_STOP, (msg) => onStop(runtime, msg));
   runtime.handlers.set(ACTION_UPDATE, (msg) => onUpdate(runtime, msg));
 }
 
@@ -122,7 +124,10 @@ function syncFilterArea(target) {
   target.filterArea = screen;
 }
 
-function clearFilterArea(target) {
+function clearFilterAreaIfUnused(target) {
+  const filters = Array.isArray(target.filters) ? target.filters : [];
+  if (filters.length > 0) return;
+
   try {
     delete target.filterArea;
   } catch {
@@ -134,10 +139,7 @@ function clearFilterArea(target) {
   }
 }
 
-function ensureEffect(runtime) {
-  const existing = getState(runtime);
-  if (existing) return existing;
-
+function createEffectState() {
   const stage = getStage();
   const FilterClass = getColorMatrixFilterClass();
   const filter = new FilterClass();
@@ -146,7 +148,7 @@ function ensureEffect(runtime) {
   syncFilterArea(stage);
   attachFilter(stage, filter);
 
-  const state = {
+  return {
     target: stage,
     filter,
     params: normaliseParams({}),
@@ -155,9 +157,6 @@ function ensureEffect(runtime) {
     fadeOutElapsedMs: 0,
     currentStrength: 0
   };
-
-  setState(runtime, state);
-  return state;
 }
 
 function hardResetFilter(filter) {
@@ -190,7 +189,7 @@ function destroyEffect(runtime) {
 
   try {
     if (state.target) {
-      clearFilterArea(state.target);
+      clearFilterAreaIfUnused(state.target);
     }
   } catch {
     // ignore
@@ -264,13 +263,15 @@ function beginStop(state) {
 }
 
 function onStart(runtime, msg) {
-  const state = ensureEffect(runtime);
+  destroyEffect(runtime);
 
+  const state = createEffectState();
   state.params = normaliseParams(msg);
   state.elapsedMs = 0;
   state.stopRequested = false;
   state.fadeOutElapsedMs = 0;
 
+  setState(runtime, state);
   refreshFilter(state);
 
   ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
@@ -292,20 +293,26 @@ function onUpdate(runtime, msg) {
     alpha: msg.alpha ?? state.params.alpha
   });
 
+  state.stopRequested = false;
+  state.fadeOutElapsedMs = 0;
+
   refreshFilter(state);
   ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
 }
 
-function onStop(runtime) {
+function onStop(runtime, msg = {}) {
   const state = getState(runtime);
   if (!state) return;
 
-  if (state.params.fadeOutMs <= 0) {
+  const immediate = Boolean(msg?.immediate);
+
+  if (immediate || state.params.fadeOutMs <= 0) {
     destroyEffect(runtime);
     return;
   }
 
   beginStop(state);
+  refreshFilter(state);
   ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
 }
 
