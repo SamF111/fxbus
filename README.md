@@ -17,15 +17,6 @@ Designed to bring environmental objects to life while remaining visual-only and 
 
 https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
 
-
----
-
-### New **Tile Oscillation**!
-Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
-Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
-
-https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
-
 ---
 
 ### New **Monochrome Filter**!
