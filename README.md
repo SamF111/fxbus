@@ -15,11 +15,7 @@ Effects can be triggered directly from a GM-facing control panel or via macros g
 Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
 Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
 
-
-
-https://github.com/user-attachments/assets/1fa78b22-f5d3-4da4-b65a-c09169572323
-
-
+https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
 
 ---
 
