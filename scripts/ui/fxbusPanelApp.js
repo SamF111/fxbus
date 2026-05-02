@@ -2,28 +2,30 @@
 
 /**
  * FX Bus - GM Control Panel App (Foundry v13+)
- * Option A: tab HTML is Handlebars partials inside fxbus-panel.hbs
  *
- * Manual tab controller (no TabsUx).
+ * Purpose:
+ * - Render the GM-only FX Bus control panel.
+ * - Load tab templates as Handlebars partials.
+ * - Wire each tab definition to the rendered form.
+ * - Persist panel field values per client.
+ * - Support Copy to Macro through each tab's buildApplyPayload(root, runtime).
+ * - Keep panel tab selection consistent with FX Bus scene-control buttons.
  *
- * Reopen fix:
- * - Foundry destroys DOM on close; next render gets a new DOM.
- * - Re-bind tab handlers on every render.
- * - Use AbortController to prevent stacked listeners across re-renders.
+ * Tab requirements:
+ * - Add the tab definition import.
+ * - Add the tab template path to TAB_PARTIALS.
+ * - Add the tab definition to buildTabs().
+ * - Add the tab section to fxbus-panel.hbs.
+ * - Add data-action="fxbusCopyToMacro" in the tab template when macro export is wanted.
  *
- * Copy-to-macro support:
- * - Adds an Application action `fxbusCopyToMacro`.
- * - Expects the active tabDef to expose `buildApplyPayload(root, runtime)` returning a socket payload.
- * - Generates a macro script that emits that payload via the FX Bus runtime and copies it to clipboard.
- *
- * Notes:
- * - Ensure TAB_PARTIALS includes any new tab templates so partials are resolvable.
- * - Ensure buildTabs() includes the matching tabDef so wiring occurs.
- * - Add a button in your tab template with: data-action="fxbusCopyToMacro"
- * - Ensure each tabDef provides `buildApplyPayload` (and optionally `macroName`).
+ * DOM lifecycle:
+ * - Foundry destroys the panel DOM on close.
+ * - Tab handlers are rebound on every render.
+ * - AbortController prevents stacked tab-navigation listeners across re-renders.
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
+import { tileOscTabDef } from "./tabs/tileOscTab.js";
 import { screenShakeTabDef } from "./tabs/screenShakeTab.js";
 import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
 import { screenVignetteTabDef } from "./tabs/screenVignetteTab.js";
@@ -34,6 +36,8 @@ import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
 import { screenMonochromeTabDef } from "./tabs/screenMonochromeTab.js";
 import { resetTabDef } from "./tabs/resetTab.js";
+
+import { activateFxBusSelectionModeForTab } from "./controls.js";
 
 import {
   fxbusBuildMacroSource,
@@ -48,6 +52,7 @@ const { loadTemplates, getTemplate } = foundry.applications.handlebars;
 
 const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenVignetteTab.hbs`,
@@ -68,6 +73,16 @@ function templatePathToPartialName(path) {
 }
 
 async function preloadFxBusTemplates() {
+  /**
+   * Large comment:
+   * Preload every tab template and register each one as a Handlebars partial.
+   *
+   * Both names are registered:
+   * - Short partial name, for example "tileOscTab"
+   * - Full module path, for example "modules/fxbus/templates/tabs/tileOscTab.hbs"
+   *
+   * This lets fxbus-panel.hbs use either include style safely.
+   */
   if (TEMPLATES_PRELOADED) return;
 
   await loadTemplates(TAB_PARTIALS);
@@ -76,10 +91,6 @@ async function preloadFxBusTemplates() {
     const partialName = templatePathToPartialName(path);
     const templateFn = await getTemplate(path);
 
-    // Support both include styles:
-    // - {{> "modules/fxbus/templates/tabs/whatever.hbs"}}
-    // - {{> "whatever"}}
-    // Some Foundry/template paths are resolved by full path, so register both keys.
     Handlebars.registerPartial(partialName, templateFn);
     Handlebars.registerPartial(path, templateFn);
   }
@@ -88,8 +99,19 @@ async function preloadFxBusTemplates() {
 }
 
 function buildTabs() {
+  /**
+   * Large comment:
+   * Build the tab definition list used by the GM panel.
+   *
+   * Each tab definition is responsible for:
+   * - id
+   * - label
+   * - wire(root, runtime)
+   * - optional buildApplyPayload(root, runtime) for Copy to Macro
+   */
   return [
     tokenOscTabDef(),
+    tileOscTabDef(),
     screenShakeTabDef(),
     screenPulseTabDef(),
     screenVignetteTabDef(),
@@ -123,6 +145,13 @@ async function writeState(patch) {
 }
 
 function applyStateToForm(root, state) {
+  /**
+   * Large comment:
+   * Reapply saved per-client form state after Foundry renders a fresh panel DOM.
+   *
+   * Values are matched by input name. This keeps field persistence generic and
+   * avoids tab-specific persistence logic.
+   */
   for (const [name, value] of Object.entries(state ?? {})) {
     const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
     if (!el) continue;
@@ -142,6 +171,13 @@ function applyStateToForm(root, state) {
 }
 
 function captureStateFromForm(root) {
+  /**
+   * Large comment:
+   * Capture all named controls in the panel form into a plain settings object.
+   *
+   * This intentionally captures every tab, not just the active one, because
+   * inactive tab panels are still present in the form DOM.
+   */
   const elements = Array.from(root.querySelectorAll("[name]"));
   const state = {};
 
@@ -167,10 +203,16 @@ function captureStateFromForm(root) {
 }
 
 function wireStatePersistence(root) {
+  /**
+   * Large comment:
+   * Debounce form-state writes so sliders, typing, and number edits do not spam
+   * game.settings. This listener is attached to the current rendered form only.
+   */
   let timer = null;
 
   const scheduleSave = () => {
     if (timer) clearTimeout(timer);
+
     timer = setTimeout(() => {
       writeState(captureStateFromForm(root));
       timer = null;
@@ -181,10 +223,14 @@ function wireStatePersistence(root) {
   root.addEventListener("change", scheduleSave, true);
 }
 
-/**
- * Manual tab controller - toggles both nav and content.
- */
 function setActiveTab(root, tabId) {
+  /**
+   * Large comment:
+   * Manual tab controller.
+   *
+   * Foundry's ApplicationV2 tab helpers are intentionally avoided here. The panel
+   * owns tab selection by toggling active classes and deterministic display state.
+   */
   const navItems = Array.from(
     root.querySelectorAll(".tabs[data-group='fxbus'] .item[data-tab]")
   );
@@ -205,6 +251,27 @@ function setActiveTab(root, tabId) {
   }
 }
 
+async function activatePanelSelectionMode(tabId) {
+  /**
+   * Large comment:
+   * Route panel tab selection through the same selection-mode logic used by the
+   * FX Bus scene-control buttons.
+   *
+   * This makes panel clicks and left-toolbar clicks consistent:
+   * - Token Osc tab -> native Token select mode
+   * - Tile Osc tab -> native Tiles select mode
+   * - Screen FX tabs -> leave current selection mode alone
+   */
+  try {
+    await activateFxBusSelectionModeForTab(tabId);
+  } catch (err) {
+    console.warn("[FX Bus] Panel tab selection-mode activation failed.", {
+      tabId,
+      err
+    });
+  }
+}
+
 function wireTabClicks(app, root, abortSignal) {
   const nav = root.querySelector(".tabs[data-group='fxbus']");
   if (!nav) return;
@@ -222,6 +289,8 @@ function wireTabClicks(app, root, abortSignal) {
 
       app._activeTab = tabId;
       setActiveTab(root, tabId);
+
+      await activatePanelSelectionMode(tabId);
       await writeState({ __activeTab: tabId });
     },
     { capture: true, signal: abortSignal }
@@ -231,6 +300,7 @@ function wireTabClicks(app, root, abortSignal) {
 function getActiveTabDef(app) {
   const tabId = String(app?._activeTab ?? "");
   if (!tabId) return null;
+
   return app?._tabs?.find?.((t) => t?.id === tabId) ?? null;
 }
 
@@ -242,6 +312,7 @@ function getFxBusModuleVersion() {
       mod?.data?.version ??
       mod?.manifest?.version ??
       "";
+
     return String(v || "").trim() || null;
   } catch {
     return null;
@@ -265,13 +336,22 @@ function getMacroMeta() {
 }
 
 async function copyActiveTabApplyToClipboard(app, root, runtime) {
+  /**
+   * Large comment:
+   * Build a macro from the active tab's current Apply payload.
+   *
+   * The panel does not know each effect's payload fields. The active tab owns
+   * that through buildApplyPayload(root, runtime).
+   */
   const tabDef = getActiveTabDef(app);
+
   if (!tabDef) {
     ui.notifications.error("FX Bus: active tab not found.");
     return;
   }
 
   const builder = tabDef.buildApplyPayload;
+
   if (typeof builder !== "function") {
     ui.notifications.error(
       `FX Bus: tab '${tabDef.id}' does not support Copy to Macro yet.`
@@ -281,6 +361,7 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
   }
 
   let payload = null;
+
   try {
     payload = builder(root, runtime);
   } catch (err) {
@@ -339,6 +420,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
   constructor(options = {}) {
     super(options);
+
     this._tabs = buildTabs();
     this._state = {};
     this._activeTab = "osc";
@@ -397,6 +479,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     } catch {
       // ignore
     }
+
     this._tabAbort = new AbortController();
     wireTabClicks(this, root, this._tabAbort.signal);
   }
@@ -407,14 +490,18 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     } catch {
       // ignore
     }
+
     this._tabAbort = null;
+
     return super._onClose(_options);
   }
 
   static _actionDoReset(event, _target) {
     event.preventDefault();
+
     const runtime = globalThis.fxbus;
     if (!runtime?.emit) return;
+
     runtime.emit({ action: "fx.bus.reset" });
   }
 
@@ -424,6 +511,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const app = this;
     const runtime = globalThis.fxbus;
     const root = app.element?.querySelector?.("form.fxbus-panel");
+
     if (!root) return;
 
     if (!runtime?.emit) {
@@ -441,6 +529,7 @@ export async function openFxBusGmControlPanel(options = {}) {
   if (!game.user.isGM) return;
 
   const runtime = globalThis.fxbus;
+
   if (!runtime?.emit) {
     ui.notifications.error("FX Bus runtime not found. Enable fxbus and reload.");
     return;
@@ -449,6 +538,7 @@ export async function openFxBusGmControlPanel(options = {}) {
   if (!panelSingleton) {
     panelSingleton = new FxBusGmControlPanelApp({ startTab: options.startTab });
   }
+
   panelSingleton.setRequestedStartTab(options.startTab);
 
   await panelSingleton.render(true);

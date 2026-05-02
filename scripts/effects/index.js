@@ -15,6 +15,7 @@ import { registerScreenSmearFx } from "./screenSmearFx.js";
 import { registerScreenStreakFx } from "./screenStreakFx.js";
 import { registerScreenMonochromeFx } from "./screenMonochromeFx.js";
 import { registerFxbusResetFx } from "./fxbusResetFx.js";
+import { registerTileOscillationFx } from "./tileOscillationFx.js";
 
 export function registerBuiltInEffects(runtime) {
   registerTokenOscillationFx(runtime);
@@ -28,4 +29,5 @@ export function registerBuiltInEffects(runtime) {
   registerScreenStreakFx(runtime);
   registerScreenMonochromeFx(runtime);
   registerFxbusResetFx(runtime);
+  registerTileOscillationFx(runtime);
 }
