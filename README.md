@@ -11,11 +11,29 @@ Effects can be triggered directly from a GM-facing control panel or via macros g
 
 ---
 
-### New Tile Oscillation!
+### New **Tile Oscillation**!
 Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
 Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
 
 https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
+
+
+---
+
+### New **Tile Oscillation**!
+Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
+Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
+
+https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
+
+---
+
+### New **Monochrome Filter**!
+Applies a full-screen monochrome grade for noir scenes, flashbacks, surveillance feeds, dream states, dramatic reveals, or cinematic emphasis.  
+Supports fade-in, timed duration, fade-out, contrast, brightness, and opacity controls while remaining entirely visual-only.
+
+https://github.com/user-attachments/assets/c1c80514-99ce-47d9-85b3-b70335213432
+
 
 ---
 
