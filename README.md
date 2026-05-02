@@ -33,7 +33,7 @@ https://github.com/user-attachments/assets/c1c80514-99ce-47d9-85b3-b70335213432
 
 I wanted a way to shake the screen and add simple, convincing motion to tokens without wading through a large configuration surface.
 
-There are excellent existing solutions – notably **Token Magic FX**, which I still use – but they are designed for a much broader and deeper set of use cases than I personally need during live play. For quick, reactive, cinematic feedback, I often found myself configuring far more than the moment warranted.
+There are excellent existing solutions, notably **Token Magic FX**, which I still use, but they are designed for a much broader and deeper set of use cases than I personally need during live play. For quick, reactive, cinematic feedback, I often found myself configuring far more than the moment warranted.
 
 I am also not a paid DM. Between Patreon subscriptions, premium modules, and content packs, I already lose money running games. I do not want to spend additional time or money learning, configuring, or maintaining heavyweight FX systems just to get immediate visual feedback.
 
