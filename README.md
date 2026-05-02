@@ -2,7 +2,7 @@
 
 ![Foundry Version](https://img.shields.io/badge/Foundry-v13-informational)
 ![Latest Release](https://img.shields.io/github/v/release/SamF111/fxbus?label=release)
-![Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/latest/fxbus.zip?label=downloads)
+![Latest Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/latest/fxbus.zip?label=latest%20downloads)
 ![Total Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/total?label=total%20downloads)
 
 **FX Bus** is a GM-broadcast, client-side visual effects framework for **Foundry Virtual Tabletop v13+**.
