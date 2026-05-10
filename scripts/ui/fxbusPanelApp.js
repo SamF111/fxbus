@@ -9,6 +9,7 @@
  * - Wire each tab definition to the rendered form.
  * - Persist panel field values per client.
  * - Support Copy to Macro through each tab's buildApplyPayload(root, runtime).
+ * - Support custom tab macro source through buildMacroSource(root, runtime, options).
  * - Keep panel tab selection consistent with FX Bus scene-control buttons.
  *
  * Tab requirements:
@@ -25,6 +26,7 @@
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
+import { tokenLaserTabDef } from "./tabs/tokenLaserTab.js";
 import { tileOscTabDef } from "./tabs/tileOscTab.js";
 import { screenShakeTabDef } from "./tabs/screenShakeTab.js";
 import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
@@ -52,6 +54,7 @@ const { loadTemplates, getTemplate } = foundry.applications.handlebars;
 
 const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tokenLaserTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
@@ -107,10 +110,12 @@ function buildTabs() {
    * - id
    * - label
    * - wire(root, runtime)
-   * - optional buildApplyPayload(root, runtime) for Copy to Macro
+   * - optional buildApplyPayload(root, runtime) for generic Copy to Macro
+   * - optional buildMacroSource(root, runtime, options) for custom Copy to Macro
    */
   return [
     tokenOscTabDef(),
+    tokenLaserTabDef(),
     tileOscTabDef(),
     screenShakeTabDef(),
     screenPulseTabDef(),
@@ -259,6 +264,7 @@ async function activatePanelSelectionMode(tabId) {
    *
    * This makes panel clicks and left-toolbar clicks consistent:
    * - Token Osc tab -> native Token select mode
+   * - Token Laser tab -> native Token select mode
    * - Tile Osc tab -> native Tiles select mode
    * - Screen FX tabs -> leave current selection mode alone
    */
@@ -335,13 +341,44 @@ function getMacroMeta() {
   };
 }
 
+function buildDefaultMacroName(tabDef, root, dateTag, timeTag) {
+  /**
+   * Large comment:
+   * Resolve a useful macro name for both generic and custom macro builders.
+   *
+   * The tab may provide:
+   * - macroName(root) function
+   * - macroName string
+   *
+   * Otherwise a timestamped panel-derived name is used.
+   */
+  if (typeof tabDef?.macroName === "function") {
+    return String(tabDef.macroName(root) ?? `FX Bus - ${tabDef.label}`);
+  }
+
+  if (typeof tabDef?.macroName === "string" && tabDef.macroName.length) {
+    return tabDef.macroName;
+  }
+
+  return `FX Bus - ${tabDef.label} - ${dateTag} ${timeTag}`;
+}
+
 async function copyActiveTabApplyToClipboard(app, root, runtime) {
   /**
    * Large comment:
-   * Build a macro from the active tab's current Apply payload.
+   * Build a macro from the active tab.
    *
-   * The panel does not know each effect's payload fields. The active tab owns
-   * that through buildApplyPayload(root, runtime).
+   * Normal path:
+   * - tabDef.buildApplyPayload(root, runtime)
+   * - fxbusBuildMacroSource(...)
+   *
+   * Custom path:
+   * - tabDef.buildMacroSource(root, runtime, options)
+   *
+   * The custom path exists for effects whose macro behaviour cannot safely be
+   * represented by a static payload. Token Laser authoritative toggles are the
+   * main example: the macro must decide start vs stop at run time using GM-local
+   * state, then emit an explicit action to every client.
    */
   const tabDef = getActiveTabDef(app);
 
@@ -350,47 +387,72 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
     return;
   }
 
-  const builder = tabDef.buildApplyPayload;
-
-  if (typeof builder !== "function") {
-    ui.notifications.error(
-      `FX Bus: tab '${tabDef.id}' does not support Copy to Macro yet.`
-    );
-    console.error("[FX Bus] Missing buildApplyPayload on tabDef", tabDef);
-    return;
-  }
-
-  let payload = null;
-
-  try {
-    payload = builder(root, runtime);
-  } catch (err) {
-    ui.notifications.error("FX Bus: failed to build macro payload. See console.");
-    console.error("[FX Bus] buildApplyPayload failed", { tab: tabDef.id, err });
-    return;
-  }
-
-  if (!payload || typeof payload !== "object") {
-    ui.notifications.error("FX Bus: invalid macro payload.");
-    console.error("[FX Bus] Invalid payload returned", { tab: tabDef.id, payload });
-    return;
-  }
-
   const iso = new Date().toISOString();
   const dateTag = iso.slice(0, 10);
   const timeTag = iso.slice(11, 19).replace(/:/g, "-");
+  const meta = getMacroMeta();
 
-  const macroName =
-    typeof tabDef.macroName === "function"
-      ? String(tabDef.macroName(root) ?? `FX Bus - ${tabDef.label}`)
-      : typeof tabDef.macroName === "string" && tabDef.macroName.length
-        ? tabDef.macroName
-        : `FX Bus - ${tabDef.label} - ${dateTag} ${timeTag}`;
+  const macroName = buildDefaultMacroName(tabDef, root, dateTag, timeTag);
 
-  const macroSource = fxbusBuildMacroSource(macroName, payload, {
-    requireGM: true,
-    meta: getMacroMeta()
-  });
+  let macroSource = null;
+
+  if (typeof tabDef.buildMacroSource === "function") {
+    try {
+      macroSource = tabDef.buildMacroSource(root, runtime, {
+        macroName,
+        meta,
+        dateTag,
+        timeTag
+      });
+    } catch (err) {
+      ui.notifications.error("FX Bus: failed to build custom macro. See console.");
+      console.error("[FX Bus] buildMacroSource failed", { tab: tabDef.id, err });
+      return;
+    }
+
+    if (typeof macroSource !== "string" || macroSource.trim().length === 0) {
+      ui.notifications.error("FX Bus: invalid custom macro source.");
+      console.error("[FX Bus] Invalid macro source returned", {
+        tab: tabDef.id,
+        macroSource
+      });
+      return;
+    }
+  } else {
+    const builder = tabDef.buildApplyPayload;
+
+    if (typeof builder !== "function") {
+      ui.notifications.error(
+        `FX Bus: tab '${tabDef.id}' does not support Copy to Macro yet.`
+      );
+      console.error("[FX Bus] Missing buildApplyPayload on tabDef", tabDef);
+      return;
+    }
+
+    let payload = null;
+
+    try {
+      payload = builder(root, runtime);
+    } catch (err) {
+      ui.notifications.error("FX Bus: failed to build macro payload. See console.");
+      console.error("[FX Bus] buildApplyPayload failed", { tab: tabDef.id, err });
+      return;
+    }
+
+    if (!payload || typeof payload !== "object") {
+      ui.notifications.error("FX Bus: invalid macro payload.");
+      console.error("[FX Bus] Invalid payload returned", {
+        tab: tabDef.id,
+        payload
+      });
+      return;
+    }
+
+    macroSource = fxbusBuildMacroSource(macroName, payload, {
+      requireGM: true,
+      meta
+    });
+  }
 
   try {
     await fxbusCopyTextToClipboard(macroSource);

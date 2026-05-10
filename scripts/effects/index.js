@@ -5,6 +5,7 @@
  */
 
 import { registerTokenOscillationFx } from "./tokenOscillationFx.js";
+import { registerTokenLaserFx } from "./tokenLaserFx.js";
 import { registerScreenShakeFx } from "./screenShakeFx.js";
 import { registerScreenPulseFx } from "./screenPulseFx.js";
 import { registerScreenVignetteFx } from "./screenVignetteFx.js";
@@ -19,6 +20,7 @@ import { registerTileOscillationFx } from "./tileOscillationFx.js";
 
 export function registerBuiltInEffects(runtime) {
   registerTokenOscillationFx(runtime);
+  registerTokenLaserFx(runtime);
   registerScreenShakeFx(runtime);
   registerScreenPulseFx(runtime);
   registerScreenVignetteFx(runtime);

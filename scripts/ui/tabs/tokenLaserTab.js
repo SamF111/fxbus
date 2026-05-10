@@ -1,0 +1,478 @@
+// D:\FoundryVTT\Data\modules\fxbus\scripts\ui\tabs\tokenLaserTab.js
+
+/**
+ * FX Bus - Token Laser Tab (Foundry v13+ ApplicationV2)
+ *
+ * Behaviour:
+ * - Uses native Foundry token selection.
+ * - First selected token becomes the laser source.
+ * - All remaining selected tokens become laser targets.
+ * - Link mode controls whether lasers form a source fan or a full token network.
+ * - Layer mode controls whether laser graphics render above tokens, below tokens, or split.
+ * - Motion mode controls whether packets move along each laser path.
+ * - Apply starts or updates a laser using the configured laserId.
+ * - Toggle uses the configured laserId as an authoritative GM-side toggle.
+ * - Stop stops the configured laserId.
+ * - Stop All removes all token lasers.
+ *
+ * Copy-to-macro support:
+ * - Provides buildApplyPayload(root, runtime) for the generic macro path.
+ * - Provides buildMacroSource(root, runtime, options) for an authoritative toggle macro.
+ * - The custom macro checks GM-local state and emits explicit start or stop.
+ * - This avoids late-joining clients interpreting raw toggle in the opposite state.
+ */
+
+import {
+  normaliseHex,
+  num,
+  selectedTokenIds,
+  setDisabled,
+  syncColourPair
+} from "./shared/panelUtils.js";
+
+const TAB_ID = "laser";
+const EFFECT_NAME = "tokenLaser";
+
+function getPanel(root) {
+  const panel = root.querySelector(
+    `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
+  );
+
+  if (!panel) throw new Error("TokenLaser: panel not found");
+
+  return panel;
+}
+
+function getLaserId(panel) {
+  const explicit = String(
+    panel.querySelector('input[name="laserId"]')?.value ?? ""
+  ).trim();
+
+  return explicit.length > 0 ? explicit : "token-laser";
+}
+
+function getSelectedLaserTokens() {
+  const tokenIds = selectedTokenIds();
+
+  if (!Array.isArray(tokenIds) || tokenIds.length < 2) {
+    throw new Error("TokenLaser: select at least two tokens");
+  }
+
+  return {
+    sourceTokenId: tokenIds[0],
+    targetTokenIds: tokenIds.slice(1)
+  };
+}
+
+function getLaserParams(panel) {
+  const until = panel.querySelector('input[name="laserUntilStopped"]');
+  const duration = panel.querySelector('input[name="laserDurationMs"]');
+
+  return {
+    laserId: getLaserId(panel),
+    colour: normaliseHex(
+      panel.querySelector('input[name="laserColour"]')?.value,
+      "#ff2222"
+    ),
+    width: num(panel.querySelector('input[name="laserWidth"]')?.value, 4),
+    alpha: num(panel.querySelector('input[name="laserAlpha"]')?.value, 0.95),
+    glow: Boolean(panel.querySelector('input[name="laserGlow"]')?.checked),
+    pulse: Boolean(panel.querySelector('input[name="laserPulse"]')?.checked),
+    pulseSpeed: num(panel.querySelector('input[name="laserPulseSpeed"]')?.value, 2),
+    style: String(panel.querySelector('select[name="laserStyle"]')?.value ?? "laser"),
+    linkMode: String(panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"),
+    layerMode: String(panel.querySelector('select[name="laserLayerMode"]')?.value ?? "split"),
+    flowDirection: String(panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"),
+    flowSpeed: num(panel.querySelector('input[name="laserFlowSpeed"]')?.value, 1.5),
+    flowCount: num(panel.querySelector('input[name="laserFlowCount"]')?.value, 3),
+    flowSize: num(panel.querySelector('input[name="laserFlowSize"]')?.value, 0),
+    flowColour: normaliseHex(
+      panel.querySelector('input[name="laserFlowColour"]')?.value,
+      "#ffffff"
+    ),
+    durationMs: until?.checked ? 0 : num(duration?.value, 1500)
+  };
+}
+
+function buildPayload(root, action) {
+  const panel = getPanel(root);
+  const tokenData = getSelectedLaserTokens();
+
+  return {
+    action,
+    ...tokenData,
+    ...getLaserParams(panel)
+  };
+}
+
+function buildStopPayload(root) {
+  const panel = getPanel(root);
+
+  return {
+    action: "fx.tokenLaser.stop",
+    laserId: getLaserId(panel)
+  };
+}
+
+function buildAuthoritativeTogglePayload(root, runtime) {
+  /**
+   * Large comment:
+   * Resolve Toggle on the GM client into an explicit start or stop payload.
+   *
+   * Do not emit fx.tokenLaser.toggle here. Raw toggle is unsafe across clients
+   * with different local state, especially when a player joins after the laser
+   * was started.
+   */
+  const panel = getPanel(root);
+  const laserId = getLaserId(panel);
+  const store = runtime?.tokenFx?.get?.(EFFECT_NAME);
+  const isActive = Boolean(store?.has?.(laserId));
+
+  if (isActive) {
+    return {
+      action: "fx.tokenLaser.stop",
+      laserId
+    };
+  }
+
+  return buildPayload(root, "fx.tokenLaser.start");
+}
+
+function jsStringLiteral(value) {
+  return String(value ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$\{/g, "\\${");
+}
+
+function buildMacroHeader(macroName, meta, laserId) {
+  const lines = [
+    "/**",
+    ` * ${jsStringLiteral(macroName || "FX Bus - Token Laser")}`,
+    " *",
+    " * Generated by FX Bus GM Control Panel.",
+    " * Action: fx.tokenLaser.authoritativeToggle",
+    ` * Laser ID: ${jsStringLiteral(laserId)}`,
+    meta?.generatedAt ? ` * Generated: ${jsStringLiteral(meta.generatedAt)}` : null,
+    meta?.generatedBy ? ` * User: ${jsStringLiteral(meta.generatedBy)}` : null,
+    meta?.fxbusVersion ? ` * FX Bus: v${jsStringLiteral(meta.fxbusVersion)}` : null,
+    " *",
+    " * Behaviour:",
+    " * - Visual-only. Does not update Documents.",
+    " * - GM-local state decides whether to emit explicit start or stop.",
+    " * - Avoids raw toggle desync for late-joining clients.",
+    " */"
+  ].filter(Boolean);
+
+  return lines.join("\n");
+}
+
+function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
+  /**
+   * Large comment:
+   * Build a Token Laser macro that behaves as an authoritative toggle.
+   *
+   * Raw fx.tokenLaser.toggle is unsafe when clients are desynchronised:
+   * - GM may have the laser active
+   * - late-joining player may not have the laser active
+   * - raw toggle then stops on GM but starts on the player
+   *
+   * This macro instead checks GM-local state, then emits explicit start or stop.
+   */
+  const laserId = String(startPayload?.laserId ?? "token-laser").trim() || "token-laser";
+
+  const safeStartPayload = {
+    ...startPayload,
+    action: "fx.tokenLaser.start",
+    laserId
+  };
+
+  const stopPayload = {
+    action: "fx.tokenLaser.stop",
+    laserId
+  };
+
+  const header = buildMacroHeader(macroName, meta, laserId);
+  const startJson = JSON.stringify(safeStartPayload, null, 2);
+  const stopJson = JSON.stringify(stopPayload, null, 2);
+
+  return `${header}
+
+(() => {
+  if (!game.user.isGM) return;
+
+  const runtime = globalThis.fxbus;
+
+  if (!runtime?.emit) {
+    ui.notifications?.error?.("FX Bus runtime not available.");
+    return;
+  }
+
+  const laserId = ${JSON.stringify(laserId)};
+  const store = runtime?.tokenFx?.get?.("${EFFECT_NAME}");
+  const isActive = Boolean(store?.has?.(laserId));
+
+  const startPayload = ${startJson};
+  const stopPayload = ${stopJson};
+
+  runtime.emit(isActive ? stopPayload : startPayload);
+})();`;
+}
+
+function updateSelectedTokenSummary(panel) {
+  const el = panel.querySelector("[data-laser-selection-summary]");
+  if (!el) return;
+
+  const controlled = canvas?.tokens?.controlled ?? [];
+
+  if (controlled.length === 0) {
+    el.textContent = "Selected tokens: none";
+    return;
+  }
+
+  if (controlled.length === 1) {
+    const name = controlled[0]?.name ?? controlled[0]?.document?.name ?? controlled[0]?.id;
+    el.textContent = `Selected tokens: 1 - source only (${name})`;
+    return;
+  }
+
+  const source = controlled[0];
+  const targets = controlled.slice(1);
+
+  const sourceName = source?.name ?? source?.document?.name ?? source?.id;
+  const targetNames = targets
+    .map((token) => token?.name ?? token?.document?.name ?? token?.id)
+    .join(", ");
+
+  const linkMode = String(
+    panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"
+  );
+
+  const layerMode = String(
+    panel.querySelector('select[name="laserLayerMode"]')?.value ?? "split"
+  );
+
+  const flowDirection = String(
+    panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"
+  );
+
+  const layerText = ` | Layer: ${layerMode}`;
+
+  const flowText = flowDirection === "none"
+    ? ""
+    : ` | Motion: ${flowDirection}`;
+
+  if (linkMode === "network") {
+    const n = controlled.length;
+    const pairCount = (n * (n - 1)) / 2;
+    el.textContent = `Network: ${n} tokens | ${pairCount} links${layerText}${flowText}`;
+    return;
+  }
+
+  el.textContent = `Source: ${sourceName} | Targets: ${targetNames}${layerText}${flowText}`;
+}
+
+function wireSelectionSummary(panel) {
+  updateSelectedTokenSummary(panel);
+
+  const refresh = () => updateSelectedTokenSummary(panel);
+
+  Hooks.on("controlToken", refresh);
+  Hooks.on("updateToken", refresh);
+  Hooks.on("deleteToken", refresh);
+
+  panel
+    .querySelector('select[name="laserLinkMode"]')
+    ?.addEventListener("change", refresh);
+
+  panel
+    .querySelector('select[name="laserLayerMode"]')
+    ?.addEventListener("change", refresh);
+
+  panel
+    .querySelector('select[name="laserFlowDirection"]')
+    ?.addEventListener("change", refresh);
+
+  const observer = new MutationObserver(refresh);
+  observer.observe(panel, { childList: true, subtree: true });
+
+  panel.__fxbusLaserCleanup = () => {
+    try {
+      Hooks.off("controlToken", refresh);
+      Hooks.off("updateToken", refresh);
+      Hooks.off("deleteToken", refresh);
+    } catch {
+      // ignore
+    }
+
+    try {
+      observer.disconnect();
+    } catch {
+      // ignore
+    }
+  };
+}
+
+function syncDurationControls(panel) {
+  const until = panel.querySelector('input[name="laserUntilStopped"]');
+  const duration = panel.querySelector('input[name="laserDurationMs"]');
+
+  if (!until || !duration) return;
+
+  const sync = () => setDisabled(duration, Boolean(until.checked));
+
+  until.addEventListener("change", sync);
+  sync();
+}
+
+function syncFlowControls(panel) {
+  const direction = panel.querySelector('select[name="laserFlowDirection"]');
+  const speed = panel.querySelector('input[name="laserFlowSpeed"]');
+  const count = panel.querySelector('input[name="laserFlowCount"]');
+  const size = panel.querySelector('input[name="laserFlowSize"]');
+  const colourPicker = panel.querySelector('input[name="laserFlowColourPicker"]');
+  const colourText = panel.querySelector('input[name="laserFlowColour"]');
+
+  if (!direction) return;
+
+  const sync = () => {
+    const disabled = direction.value === "none";
+    setDisabled(speed, disabled);
+    setDisabled(count, disabled);
+    setDisabled(size, disabled);
+    setDisabled(colourPicker, disabled);
+    setDisabled(colourText, disabled);
+  };
+
+  direction.addEventListener("change", sync);
+  sync();
+}
+
+export function tokenLaserTabDef() {
+  return {
+    id: TAB_ID,
+    label: "Token Laser",
+
+    /**
+     * Build the generic socket payload for Copy-to-Macro fallback.
+     *
+     * This returns explicit start, not raw toggle. The real Copy to Macro path
+     * should use buildMacroSource, but keeping this safe avoids future accidental
+     * local-state inversion.
+     *
+     * @param {HTMLElement} root
+     * @param {object} runtime
+     * @returns {object}
+     */
+    buildApplyPayload(root, _runtime) {
+      return buildPayload(root, "fx.tokenLaser.start");
+    },
+
+    /**
+     * Build a custom authoritative toggle macro.
+     *
+     * @param {HTMLElement} root
+     * @param {object} runtime
+     * @param {object} options
+     * @param {string} options.macroName
+     * @param {object} options.meta
+     * @returns {string}
+     */
+    buildMacroSource(root, _runtime, options = {}) {
+      const startPayload = buildPayload(root, "fx.tokenLaser.start");
+
+      return buildAuthoritativeToggleMacroSource(
+        startPayload,
+        options.macroName ?? "FX Bus - Token Laser",
+        options.meta ?? {}
+      );
+    },
+
+    macroName(root) {
+      try {
+        const panel = getPanel(root);
+        return `FX Bus - Token Laser - ${getLaserId(panel)}`;
+      } catch {
+        return "FX Bus - Token Laser";
+      }
+    },
+
+    wire(root, runtime) {
+      const panel = root.querySelector(
+        `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
+      );
+      if (!panel) return;
+
+      try {
+        panel.__fxbusLaserCleanup?.();
+      } catch {
+        // ignore
+      }
+
+      syncColourPair(panel, "laserColourPicker", "laserColour", "#ff2222");
+      syncColourPair(panel, "laserFlowColourPicker", "laserFlowColour", "#ffffff");
+      syncDurationControls(panel);
+      syncFlowControls(panel);
+      wireSelectionSummary(panel);
+
+      function apply() {
+        try {
+          runtime.emit(buildPayload(root, "fx.tokenLaser.update"));
+        } catch (err) {
+          ui.notifications.warn("Select at least two tokens for Token Laser.");
+          console.warn("[FX Bus] Token Laser apply failed", err);
+        }
+      }
+
+      function toggle() {
+        try {
+          runtime.emit(buildAuthoritativeTogglePayload(root, runtime));
+        } catch (err) {
+          ui.notifications.warn("Select at least two tokens for Token Laser.");
+          console.warn("[FX Bus] Token Laser toggle failed", err);
+        }
+      }
+
+      function stop() {
+        try {
+          runtime.emit(buildStopPayload(root));
+        } catch (err) {
+          ui.notifications.warn("Token Laser stop failed.");
+          console.warn("[FX Bus] Token Laser stop failed", err);
+        }
+      }
+
+      function stopAll() {
+        runtime.emit({ action: "fx.tokenLaser.stopAll" });
+      }
+
+      panel
+        .querySelector('button[type="button"][data-do="laserApply"]')
+        ?.addEventListener("click", (event) => {
+          event.preventDefault();
+          apply();
+        });
+
+      panel
+        .querySelector('button[type="button"][data-do="laserToggle"]')
+        ?.addEventListener("click", (event) => {
+          event.preventDefault();
+          toggle();
+        });
+
+      panel
+        .querySelector('button[type="button"][data-do="laserStop"]')
+        ?.addEventListener("click", (event) => {
+          event.preventDefault();
+          stop();
+        });
+
+      panel
+        .querySelector('button[type="button"][data-do="laserStopAll"]')
+        ?.addEventListener("click", (event) => {
+          event.preventDefault();
+          stopAll();
+        });
+    }
+  };
+}

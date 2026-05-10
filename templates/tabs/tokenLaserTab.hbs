@@ -1,0 +1,207 @@
+<p class="fxbus-muted">
+  Requires at least two selected tokens. Network mode links every selected token to every other selected token. Source mode links the first selected token to all other selected tokens.
+</p>
+
+<p class="fxbus-muted" data-laser-selection-summary>
+  Selected tokens: none
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="form-group">
+  <label>Laser ID</label>
+  <input
+    type="text"
+    name="laserId"
+    value="token-laser"
+    placeholder="boss-pylon-lasers"
+  />
+  <p class="fxbus-muted">
+    Use a stable ID for macro toggles. The same ID toggles the same configured laser on and off.
+  </p>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Colour</label>
+    <div class="fxbus-inline">
+      <input type="color" name="laserColourPicker" value="#ff2222"/>
+      <input type="text" name="laserColour" value="#ff2222" placeholder="#rrggbb"/>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Style</label>
+    <select name="laserStyle">
+      <option value="laser" selected>Laser</option>
+      <option value="beam">Beam</option>
+      <option value="arc">Arc</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Link mode</label>
+    <select name="laserLinkMode">
+      <option value="network" selected>Network - all selected tokens</option>
+      <option value="source">Source - first selected to all others</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Layer</label>
+    <select name="laserLayerMode">
+      <option value="split" selected>Split - body below, highlights above</option>
+      <option value="above">Above tokens</option>
+      <option value="below">Below tokens</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Width (px)</label>
+    <input
+      type="number"
+      name="laserWidth"
+      value="4"
+      step="0.5"
+      min="1"
+      max="40"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Alpha</label>
+    <input
+      type="number"
+      name="laserAlpha"
+      value="0.95"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="laserGlow" checked/>
+      Glow
+    </label>
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="laserPulse" checked/>
+      Pulse
+    </label>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Pulse speed</label>
+    <input
+      type="number"
+      name="laserPulseSpeed"
+      value="2"
+      step="0.1"
+      min="0"
+      max="20"
+    />
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="laserUntilStopped" checked/>
+      Run until stopped
+    </label>
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Motion</label>
+    <select name="laserFlowDirection">
+      <option value="none" selected>None</option>
+      <option value="forward">Flow - source to target</option>
+      <option value="reverse">Reverse - target to source</option>
+      <option value="pingpong">Ping-pong</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Motion colour</label>
+    <div class="fxbus-inline">
+      <input type="color" name="laserFlowColourPicker" value="#ffffff"/>
+      <input type="text" name="laserFlowColour" value="#ffffff" placeholder="#rrggbb"/>
+    </div>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Motion speed</label>
+    <input
+      type="number"
+      name="laserFlowSpeed"
+      value="1.5"
+      step="0.1"
+      min="0"
+      max="20"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Motion count</label>
+    <input
+      type="number"
+      name="laserFlowCount"
+      value="3"
+      step="1"
+      min="1"
+      max="20"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Motion size (px, 0 = auto)</label>
+  <input
+    type="number"
+    name="laserFlowSize"
+    value="0"
+    step="0.5"
+    min="0"
+    max="60"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="form-group">
+  <label>Duration (ms)</label>
+  <input
+    type="number"
+    name="laserDurationMs"
+    value="1500"
+    step="50"
+    min="1"
+    max="600000"
+  />
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="laserApply">Apply</button>
+  <button type="button" class="fxbus-do" data-do="laserToggle">Toggle</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="laserStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="laserStopAll">Stop All</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
+</div>

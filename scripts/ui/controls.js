@@ -13,6 +13,7 @@
  * Behaviour:
  * - One FX Bus menu appears on the left.
  * - Token Oscillation activates Foundry's native Token select tool.
+ * - Token Laser activates Foundry's native Token select tool.
  * - Tile Oscillation activates Foundry's native Tiles select tool.
  * - Screen FX leave the current selection mode alone.
  * - Token selection uses canvas.tokens.controlled.
@@ -43,6 +44,13 @@ const TOOL_DEFS = [
     title: "Token Oscillation",
     icon: "fas fa-ship",
     tab: "osc",
+    targetKind: TARGET_KIND_TOKEN
+  },
+  {
+    name: "fxbus-laser",
+    title: "Token Laser",
+    icon: "fas fa-link",
+    tab: "laser",
     targetKind: TARGET_KIND_TOKEN
   },
   {
@@ -119,6 +127,7 @@ const TOOL_DEFS = [
 
 const TAB_TARGET_KIND = {
   osc: TARGET_KIND_TOKEN,
+  laser: TARGET_KIND_TOKEN,
   tileOsc: TARGET_KIND_TILE,
 
   shake: TARGET_KIND_NONE,

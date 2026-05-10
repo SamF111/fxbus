@@ -129,6 +129,14 @@
   </section>
 
   <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'laser')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="laser"
+  >
+    {{> "modules/fxbus/templates/tabs/tokenLaserTab.hbs"}}
+  </section>
+
+  <section
     class="tab fxbus-panel-section {{#if (eq activeTab 'tileOsc')}}active{{/if}}"
     data-group="fxbus"
     data-tab="tileOsc"

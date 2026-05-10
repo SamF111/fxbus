@@ -8,6 +8,7 @@
  *
  * Mechanism:
  * - Dispatch each effect's STOP action so that it can restore its own snapshots.
+ * - Dispatch hard-reset handlers where available for defensive orphan cleanup.
  * - Then hard-clean tickers and residual maps as a backstop.
  *
  * Assumptions:
@@ -15,6 +16,7 @@
  * - Tile effects are stored in runtime.tileFx as Map(effectName -> Map(tileId -> state)).
  * - Screen effects are stored in runtime.screenFx as Map(effectName -> state).
  * - Each effect provides a stop handler registered on runtime.handlers for its stop action.
+ * - Some effects may provide a hard reset handler for orphaned PIXI cleanup.
  * - Ticker utilities manage runtime.tickers as Map(effectName -> wrappedTickerFn) and must be removed via cleanupTicker().
  */
 
@@ -25,6 +27,8 @@ const ACTION_RESET = "fx.bus.reset";
 // Token stop actions
 const TOKEN_OSC_STOP = "fx.tokenOsc.stop";
 const TOKEN_OSC_STOP_LEGACY = "tokenOscStop";
+const TOKEN_LASER_STOP_ALL = "fx.tokenLaser.stopAll";
+const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
 
 // Tile stop actions
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
@@ -190,13 +194,15 @@ function onReset(runtime) {
    * Large comment:
    * Global reset order matters:
    *
-   * 1. Stop token effects using explicit tokenIds so token transforms restore.
-   * 2. Stop tile effects using explicit tileIds so tile transforms restore.
-   * 3. Stop screen effects so stage offsets, filters, and overlays restore.
-   * 4. Remove any residual tickers.
-   * 5. Clear runtime maps as a final backstop.
+   * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
+   * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
+   * 3. Stop tile effects using explicit tileIds so tile transforms restore.
+   * 4. Stop screen effects so stage offsets, filters, and overlays restore.
+   * 5. Remove any residual tickers.
+   * 6. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
+
   if (tokenIds.length > 0) {
     if (hasHandler(runtime, TOKEN_OSC_STOP)) {
       safeCallHandler(runtime, TOKEN_OSC_STOP, {
@@ -211,7 +217,16 @@ function onReset(runtime) {
     }
   }
 
+  stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
+    action: TOKEN_LASER_STOP_ALL
+  });
+
+  stopIfPresent(runtime, TOKEN_LASER_HARD_RESET, {
+    action: TOKEN_LASER_HARD_RESET
+  });
+
   const tileIds = collectIdsFromNestedFxMap(runtime.tileFx);
+
   if (tileIds.length > 0) {
     if (hasHandler(runtime, TILE_OSC_STOP)) {
       safeCallHandler(runtime, TILE_OSC_STOP, {
