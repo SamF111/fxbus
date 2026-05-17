@@ -48,7 +48,7 @@ const TOOL_DEFS = [
   },
   {
     name: "fxbus-laser",
-    title: "Token Laser",
+    title: "Token Tether",
     icon: "fas fa-link",
     tab: "laser",
     targetKind: TARGET_KIND_TOKEN

@@ -8,9 +8,9 @@
  * - First selected token becomes the laser source.
  * - All remaining selected tokens become laser targets.
  * - Link mode controls whether lasers form a source fan or a full token network.
- * - Layer mode controls whether laser graphics render above tokens, below tokens, or split.
- * - Motion mode controls whether packets move along each laser path.
- * - Apply starts or updates a laser using the configured laserId.
+ * - Layer mode controls whether graphics render above tokens, below tokens, or split.
+ * - Motion mode controls whether packets move along each path.
+ * - Apply starts or updates a laser/link using the configured laserId.
  * - Toggle uses the configured laserId as an authoritative GM-side toggle.
  * - Stop stops the configured laserId.
  * - Stop All removes all token lasers.
@@ -70,26 +70,55 @@ function getLaserParams(panel) {
 
   return {
     laserId: getLaserId(panel),
+
     colour: normaliseHex(
       panel.querySelector('input[name="laserColour"]')?.value,
       "#ff2222"
     ),
+
+    secondaryColour: normaliseHex(
+      panel.querySelector('input[name="laserSecondaryColour"]')?.value,
+      "#ffffff"
+    ),
+
+    outlineColour: normaliseHex(
+      panel.querySelector('input[name="laserOutlineColour"]')?.value,
+      "#000000"
+    ),
+
     width: num(panel.querySelector('input[name="laserWidth"]')?.value, 4),
     alpha: num(panel.querySelector('input[name="laserAlpha"]')?.value, 0.95),
     glow: Boolean(panel.querySelector('input[name="laserGlow"]')?.checked),
     pulse: Boolean(panel.querySelector('input[name="laserPulse"]')?.checked),
     pulseSpeed: num(panel.querySelector('input[name="laserPulseSpeed"]')?.value, 2),
+
     style: String(panel.querySelector('select[name="laserStyle"]')?.value ?? "laser"),
     linkMode: String(panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"),
     layerMode: String(panel.querySelector('select[name="laserLayerMode"]')?.value ?? "split"),
+
+    sagPx: num(panel.querySelector('input[name="laserSagPx"]')?.value, 0),
+    segments: num(panel.querySelector('input[name="laserSegments"]')?.value, 24),
+
+    twistFreq: num(panel.querySelector('input[name="laserTwistFreq"]')?.value, 0.45),
+    twistSpeed: num(panel.querySelector('input[name="laserTwistSpeed"]')?.value, 1.2),
+
+    swayPx: num(panel.querySelector('input[name="laserSwayPx"]')?.value, 0),
+    swayHz: num(panel.querySelector('input[name="laserSwayHz"]')?.value, 0.8),
+
+    linkSpacingPx: num(panel.querySelector('input[name="laserLinkSpacingPx"]')?.value, 14),
+    linkLengthPx: num(panel.querySelector('input[name="laserLinkLengthPx"]')?.value, 16),
+    linkWidthPx: num(panel.querySelector('input[name="laserLinkWidthPx"]')?.value, 7),
+
     flowDirection: String(panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"),
     flowSpeed: num(panel.querySelector('input[name="laserFlowSpeed"]')?.value, 1.5),
     flowCount: num(panel.querySelector('input[name="laserFlowCount"]')?.value, 3),
     flowSize: num(panel.querySelector('input[name="laserFlowSize"]')?.value, 0),
+
     flowColour: normaliseHex(
       panel.querySelector('input[name="laserFlowColour"]')?.value,
       "#ffffff"
     ),
+
     durationMs: until?.checked ? 0 : num(duration?.value, 1500)
   };
 }
@@ -244,6 +273,10 @@ function updateSelectedTokenSummary(panel) {
     .map((token) => token?.name ?? token?.document?.name ?? token?.id)
     .join(", ");
 
+  const style = String(
+    panel.querySelector('select[name="laserStyle"]')?.value ?? "laser"
+  );
+
   const linkMode = String(
     panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"
   );
@@ -256,6 +289,7 @@ function updateSelectedTokenSummary(panel) {
     panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"
   );
 
+  const styleText = ` | Style: ${style}`;
   const layerText = ` | Layer: ${layerMode}`;
 
   const flowText = flowDirection === "none"
@@ -265,11 +299,11 @@ function updateSelectedTokenSummary(panel) {
   if (linkMode === "network") {
     const n = controlled.length;
     const pairCount = (n * (n - 1)) / 2;
-    el.textContent = `Network: ${n} tokens | ${pairCount} links${layerText}${flowText}`;
+    el.textContent = `Network: ${n} tokens | ${pairCount} links${styleText}${layerText}${flowText}`;
     return;
   }
 
-  el.textContent = `Source: ${sourceName} | Targets: ${targetNames}${layerText}${flowText}`;
+  el.textContent = `Source: ${sourceName} | Targets: ${targetNames}${styleText}${layerText}${flowText}`;
 }
 
 function wireSelectionSummary(panel) {
@@ -280,6 +314,10 @@ function wireSelectionSummary(panel) {
   Hooks.on("controlToken", refresh);
   Hooks.on("updateToken", refresh);
   Hooks.on("deleteToken", refresh);
+
+  panel
+    .querySelector('select[name="laserStyle"]')
+    ?.addEventListener("change", refresh);
 
   panel
     .querySelector('select[name="laserLinkMode"]')
@@ -348,10 +386,57 @@ function syncFlowControls(panel) {
   sync();
 }
 
+function syncProceduralControls(panel) {
+  /**
+   * Large comment:
+   * Disable irrelevant advanced procedural controls based on the selected style.
+   *
+   * The payload still contains all fields because the effect normaliser accepts
+   * them safely. This only reduces UI confusion in the control panel.
+   */
+  const style = panel.querySelector('select[name="laserStyle"]');
+
+  const sag = panel.querySelector('input[name="laserSagPx"]');
+  const segments = panel.querySelector('input[name="laserSegments"]');
+  const sway = panel.querySelector('input[name="laserSwayPx"]');
+  const swayHz = panel.querySelector('input[name="laserSwayHz"]');
+
+  const twistFreq = panel.querySelector('input[name="laserTwistFreq"]');
+  const twistSpeed = panel.querySelector('input[name="laserTwistSpeed"]');
+
+  const chainSpacing = panel.querySelector('input[name="laserLinkSpacingPx"]');
+  const chainLength = panel.querySelector('input[name="laserLinkLengthPx"]');
+  const chainWidth = panel.querySelector('input[name="laserLinkWidthPx"]');
+
+  if (!style) return;
+
+  const sync = () => {
+    const value = style.value;
+    const isProceduralCurve = ["rope", "chain", "cable"].includes(value);
+    const isRope = value === "rope";
+    const isChain = value === "chain";
+
+    setDisabled(sag, !isProceduralCurve);
+    setDisabled(segments, !isProceduralCurve);
+    setDisabled(sway, !isProceduralCurve);
+    setDisabled(swayHz, !isProceduralCurve);
+
+    setDisabled(twistFreq, !isRope);
+    setDisabled(twistSpeed, true);
+
+    setDisabled(chainSpacing, !isChain);
+    setDisabled(chainLength, !isChain);
+    setDisabled(chainWidth, !isChain);
+  };
+
+  style.addEventListener("change", sync);
+  sync();
+}
+
 export function tokenLaserTabDef() {
   return {
     id: TAB_ID,
-    label: "Token Laser",
+    label: "Token Tether",
 
     /**
      * Build the generic socket payload for Copy-to-Macro fallback.
@@ -383,7 +468,7 @@ export function tokenLaserTabDef() {
 
       return buildAuthoritativeToggleMacroSource(
         startPayload,
-        options.macroName ?? "FX Bus - Token Laser",
+        options.macroName ?? "FX Bus - Token Tether",
         options.meta ?? {}
       );
     },
@@ -391,9 +476,9 @@ export function tokenLaserTabDef() {
     macroName(root) {
       try {
         const panel = getPanel(root);
-        return `FX Bus - Token Laser - ${getLaserId(panel)}`;
+        return `FX Bus - Token Tether - ${getLaserId(panel)}`;
       } catch {
-        return "FX Bus - Token Laser";
+        return "FX Bus - Token Tether";
       }
     },
 
@@ -410,17 +495,21 @@ export function tokenLaserTabDef() {
       }
 
       syncColourPair(panel, "laserColourPicker", "laserColour", "#ff2222");
+      syncColourPair(panel, "laserSecondaryColourPicker", "laserSecondaryColour", "#ffffff");
+      syncColourPair(panel, "laserOutlineColourPicker", "laserOutlineColour", "#000000");
       syncColourPair(panel, "laserFlowColourPicker", "laserFlowColour", "#ffffff");
+
       syncDurationControls(panel);
       syncFlowControls(panel);
+      syncProceduralControls(panel);
       wireSelectionSummary(panel);
 
       function apply() {
         try {
           runtime.emit(buildPayload(root, "fx.tokenLaser.update"));
         } catch (err) {
-          ui.notifications.warn("Select at least two tokens for Token Laser.");
-          console.warn("[FX Bus] Token Laser apply failed", err);
+          ui.notifications.warn("Select at least two tokens for Token Tether.");
+          console.warn("[FX Bus] Token Tether apply failed", err);
         }
       }
 
@@ -428,8 +517,8 @@ export function tokenLaserTabDef() {
         try {
           runtime.emit(buildAuthoritativeTogglePayload(root, runtime));
         } catch (err) {
-          ui.notifications.warn("Select at least two tokens for Token Laser.");
-          console.warn("[FX Bus] Token Laser toggle failed", err);
+          ui.notifications.warn("Select at least two tokens for Token Tether.");
+          console.warn("[FX Bus] Token Tether toggle failed", err);
         }
       }
 
@@ -437,8 +526,8 @@ export function tokenLaserTabDef() {
         try {
           runtime.emit(buildStopPayload(root));
         } catch (err) {
-          ui.notifications.warn("Token Laser stop failed.");
-          console.warn("[FX Bus] Token Laser stop failed", err);
+          ui.notifications.warn("Token Tether stop failed.");
+          console.warn("[FX Bus] Token Tether stop failed", err);
         }
       }
 
@@ -446,33 +535,18 @@ export function tokenLaserTabDef() {
         runtime.emit({ action: "fx.tokenLaser.stopAll" });
       }
 
-      panel
-        .querySelector('button[type="button"][data-do="laserApply"]')
-        ?.addEventListener("click", (event) => {
+      for (const button of Array.from(panel.querySelectorAll(".fxbus-do[data-do]"))) {
+        button.addEventListener("click", (event) => {
           event.preventDefault();
-          apply();
-        });
 
-      panel
-        .querySelector('button[type="button"][data-do="laserToggle"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          toggle();
-        });
+          const action = button.dataset.do;
 
-      panel
-        .querySelector('button[type="button"][data-do="laserStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
+          if (action === "laserApply") apply();
+          if (action === "laserToggle") toggle();
+          if (action === "laserStop") stop();
+          if (action === "laserStopAll") stopAll();
         });
-
-      panel
-        .querySelector('button[type="button"][data-do="laserStopAll"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stopAll();
-        });
+      }
     }
   };
 }
