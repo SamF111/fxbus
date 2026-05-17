@@ -3,7 +3,6 @@
 ![Foundry Version](https://img.shields.io/badge/Foundry-v13-informational)
 ![Latest Release](https://img.shields.io/github/v/release/SamF111/fxbus?label=release)
 ![Latest Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/latest/fxbus.zip?label=latest%20downloads)
-![Total Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/total?label=total%20downloads)
 
 **FX Bus** is a GM-broadcast, client-side visual effects framework for **Foundry Virtual Tabletop v13+**.
 
@@ -16,19 +15,19 @@ Effects can be triggered directly from a GM-facing control panel or via macros g
 
 ---
 
-### New **Tile Oscillation**!
-Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
-Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
+### New **Token Laser Links**!
+Draws persistent visual links between selected tokens, including lasers, beams, arcs, and moving energy-flow effects.  
+Use it for magical tethers, targeting lines, power conduits, healing links, containment beams, security grids, boss mechanics, or synchronised token networks.
 
-https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
+Supports source-to-target links or full token networks, with configurable colour, width, glow, pulse, render layer, and animated motion packets.  
+Designed to remain visual-only, client-side, and non-disruptive during play.
 
----
+Demo: Tiny and Io-style tethering from Dota 2.
 
-### New **Monochrome Filter**!
-Applies a full-screen monochrome grade for noir scenes, flashbacks, surveillance feeds, dream states, dramatic reveals, or cinematic emphasis.  
-Supports fade-in, timed duration, fade-out, contrast, brightness, and opacity controls while remaining entirely visual-only.
 
-https://github.com/user-attachments/assets/c1c80514-99ce-47d9-85b3-b70335213432
+
+https://github.com/user-attachments/assets/5016e0a7-31e3-4e49-8414-abce725b6e6b
+
 
 
 ---
@@ -181,6 +180,22 @@ Designed for high-speed motion, extreme momentum, or temporal distortion effects
 ### Screen Streak
 Directional motion streaks using temporal feedback.  
 Useful for rapid movement, warp effects, velocity emphasis, or cinematic transitions.
+
+---
+
+**Tile Oscillation**!
+Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
+Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
+
+https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
+
+---
+
+**Monochrome Filter**!
+Applies a full-screen monochrome grade for noir scenes, flashbacks, surveillance feeds, dream states, dramatic reveals, or cinematic emphasis.  
+Supports fade-in, timed duration, fade-out, contrast, brightness, and opacity controls while remaining entirely visual-only.
+
+https://github.com/user-attachments/assets/c1c80514-99ce-47d9-85b3-b70335213432
 
 ---
 
