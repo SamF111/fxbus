@@ -4,7 +4,7 @@
 ![Latest Release](https://img.shields.io/github/v/release/SamF111/fxbus?label=release)
 ![Latest Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/latest/fxbus.zip?label=latest%20downloads)
 
-**FX Bus** is a GM-broadcast cinematic FX framework for **Foundry Virtual Tabletop v14+**.
+**FX Bus** is a GM-broadcast cinematic FX framework for **Foundry Virtual Tabletop v13+**.
 
 It provides deterministic, client-side, non-persistent visual effects for live play. Effects are shown to connected clients without mutating documents, actors, tokens, scenes, or world state.
 
