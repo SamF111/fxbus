@@ -23,9 +23,7 @@ I wanted a quick way to shake the screen, add motion to tokens, animate tiles, a
 
 There are excellent existing solutions, notably [Token Magic FX](https://github.com/Feu-Secret/Tokenmagic), which I still use. There are also powerful automation and sequencing tools such as [Sequencer](https://github.com/fantasycalendar/FoundryVTT-Sequencer), which can achieve many similar results. FX Bus is not trying to replace those modules.
 
-It fills a narrower gap.
-
-During a session, I often want immediate visual feedback: a screen shake after an explosion, a token rocking during vehicle movement, a tile swaying in the background, or a tether snapping between two characters. I do not want to pause the game to configure a complex effect stack, maintain scene objects, manage assets, or build a full sequence for a moment that needs to happen now.
+It fits a much more narrow niche. During a session, I often want immediate visual feedback: a screen shake after an explosion, a token rocking during vehicle movement, a tile swaying in the background, or a tether snapping between two characters. I do not want to pause the game to configure a complex effect stack, maintain scene objects, manage assets, or build a full sequence for a moment that needs to happen now.
 
 I am also not a paid DM. Between Patreon subscriptions, premium modules, and content packs, running games already costs me money. FX Bus is built around the kind of effects I personally want at the table: fast, reusable, visual-only, and low-maintenance.
 
@@ -42,6 +40,7 @@ The design goal is simple: if an effect cannot be started, stopped, and understo
 
 FX Bus favours lightweight, shader-driven and PIXI-driven visual effects over deep effect authoring. It is built to support improvisation, not replace specialist VFX modules.
 
+All effects are generated procedurally at runtime using client-side rendering. There are currently no plans to include external asset files, visual or otherwise.
 
 ---
 
@@ -172,7 +171,7 @@ Useful for rapid movement, warp effects, velocity emphasis, or cinematic transit
 
 ---
 
-**Tile Oscillation**!
+### Tile Oscillation
 Applies subtle, continuous motion to selected tiles to simulate swaying trees, hanging signs, loose cables, cloth, foliage, machinery, lamps, or suspended debris.  
 Designed to bring environmental objects to life while remaining visual-only and non-disruptive during play.
 
@@ -180,7 +179,7 @@ https://github.com/user-attachments/assets/b476a2c5-744e-49c6-be2a-bcf127f71106
 
 ---
 
-**Monochrome Filter**!
+### Monochrome Filter
 Applies a full-screen monochrome grade for noir scenes, flashbacks, surveillance feeds, dream states, dramatic reveals, or cinematic emphasis.  
 Supports fade-in, timed duration, fade-out, contrast, brightness, and opacity controls while remaining entirely visual-only.
 
@@ -189,7 +188,7 @@ https://github.com/user-attachments/assets/c1c80514-99ce-47d9-85b3-b70335213432
 ---
 
 
-**Token Laser Links**!
+### Token Laser Links
 Draws persistent visual links between selected tokens, including lasers, beams, arcs, and moving energy-flow effects.  
 Use it for magical tethers, targeting lines, power conduits, healing links, containment beams, security grids, boss mechanics, or synchronised token networks.
 
