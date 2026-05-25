@@ -10,7 +10,21 @@
  * - Persist panel field values per client.
  * - Support Copy to Macro through each tab's buildApplyPayload(root, runtime).
  * - Support custom tab macro source through buildMacroSource(root, runtime, options).
- * - Keep panel tab selection consistent with FX Bus scene-control buttons.
+ * - Keep panel tab selection consistent with FX Bus panel navigation.
+ *
+ * Selection-layer behaviour:
+ * - Each tab may declare selectionLayer: "tokens", "tiles", or null.
+ * - Token Oscillation should declare "tokens".
+ * - Token Tether should declare "tokens".
+ * - Tile Oscillation should declare "tiles".
+ * - Screen FX tabs omit selectionLayer or set it to null.
+ * - The panel activates the declared native Foundry selection layer when opened
+ *   directly onto a tab or when a tab is clicked inside the panel.
+ *
+ * Current v14 stability decision:
+ * - Token Tether is enabled.
+ * - Token Tether does not use live token-summary hooks or MutationObserver logic.
+ * - Token/tile targeting is read only when Apply, Toggle, or macro generation runs.
  *
  * Tab requirements:
  * - Add the tab definition import.
@@ -18,6 +32,7 @@
  * - Add the tab definition to buildTabs().
  * - Add the tab section to fxbus-panel.hbs.
  * - Add data-action="fxbusCopyToMacro" in the tab template when macro export is wanted.
+ * - Add selectionLayer to the tab definition when the tab needs a native selection layer.
  *
  * DOM lifecycle:
  * - Foundry destroys the panel DOM on close.
@@ -38,8 +53,6 @@ import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
 import { screenMonochromeTabDef } from "./tabs/screenMonochromeTab.js";
 import { resetTabDef } from "./tabs/resetTab.js";
-
-import { activateFxBusSelectionModeForTab } from "./controls.js";
 
 import {
   fxbusBuildMacroSource,
@@ -78,7 +91,7 @@ function templatePathToPartialName(path) {
 async function preloadFxBusTemplates() {
   /**
    * Large comment:
-   * Preload every tab template and register each one as a Handlebars partial.
+   * Preload every enabled tab template and register each one as a Handlebars partial.
    *
    * Both names are registered:
    * - Short partial name, for example "tileOscTab"
@@ -104,12 +117,13 @@ async function preloadFxBusTemplates() {
 function buildTabs() {
   /**
    * Large comment:
-   * Build the tab definition list used by the GM panel.
+   * Build the enabled tab definition list used by the GM panel.
    *
    * Each tab definition is responsible for:
    * - id
    * - label
    * - wire(root, runtime)
+   * - optional selectionLayer: "tokens", "tiles", or null
    * - optional buildApplyPayload(root, runtime) for generic Copy to Macro
    * - optional buildMacroSource(root, runtime, options) for custom Copy to Macro
    */
@@ -256,29 +270,167 @@ function setActiveTab(root, tabId) {
   }
 }
 
-async function activatePanelSelectionMode(tabId) {
+function getSceneControlsCollection() {
+  return ui?.controls?.controls ?? null;
+}
+
+function getNativeControl(controlNames) {
   /**
    * Large comment:
-   * Route panel tab selection through the same selection-mode logic used by the
-   * FX Bus scene-control buttons.
+   * Resolve a native Foundry control group by likely names.
    *
-   * This makes panel clicks and left-toolbar clicks consistent:
-   * - Token Osc tab -> native Token select mode
-   * - Token Laser tab -> native Token select mode
-   * - Tile Osc tab -> native Tiles select mode
-   * - Screen FX tabs -> leave current selection mode alone
+   * Foundry versions may expose controls as either arrays or object maps. This
+   * helper supports both without depending on controls.js exports.
    */
+  const controls = getSceneControlsCollection();
+  if (!controls) return null;
+
+  if (Array.isArray(controls)) {
+    return controls.find((control) => controlNames.includes(control?.name)) ?? null;
+  }
+
+  if (typeof controls === "object") {
+    for (const name of controlNames) {
+      if (controls[name]) return controls[name];
+    }
+
+    return Object.values(controls).find((control) => {
+      return controlNames.includes(control?.name);
+    }) ?? null;
+  }
+
+  return null;
+}
+
+function getNativeSelectToolName(control) {
+  /**
+   * Large comment:
+   * Resolve the best native selection tool for a control group.
+   *
+   * Prefer "select". Fall back to the control's active tool. Fall back again to
+   * the first named tool.
+   */
+  const tools = control?.tools;
+
+  if (!tools) return "select";
+
+  if (Array.isArray(tools)) {
+    if (tools.some((tool) => tool?.name === "select")) return "select";
+
+    if (typeof control?.activeTool === "string" && control.activeTool.length > 0) {
+      return control.activeTool;
+    }
+
+    return tools.find((tool) => {
+      return typeof tool?.name === "string" && tool.name.length > 0;
+    })?.name ?? "select";
+  }
+
+  if (typeof tools === "object") {
+    if (tools.select) return "select";
+
+    if (typeof control?.activeTool === "string" && control.activeTool.length > 0) {
+      return control.activeTool;
+    }
+
+    return Object.values(tools).find((tool) => {
+      return typeof tool?.name === "string" && tool.name.length > 0;
+    })?.name ?? "select";
+  }
+
+  return "select";
+}
+
+async function activateNativeSelectionLayer(selectionLayer) {
+  /**
+   * Large comment:
+   * Activate native Foundry Token/Tiles selection from the panel without relying
+   * on controls.js.
+   *
+   * This intentionally uses Foundry's native SceneControls activation. It may
+   * move the left toolbar to Tokens or Tiles; that is the accepted workflow for
+   * real token/tile selection.
+   */
+  const layer = String(selectionLayer ?? "");
+  if (!layer) return false;
+
+  const controlsUi = ui?.controls;
+
+  if (!controlsUi || typeof controlsUi.activate !== "function") {
+    ui.notifications.warn("FX Bus: native controls API unavailable.");
+    return false;
+  }
+
+  const control =
+    layer === "tokens"
+      ? getNativeControl(["tokens", "token"])
+      : layer === "tiles"
+        ? getNativeControl(["tiles", "tile"])
+        : null;
+
+  if (!control?.name) {
+    ui.notifications.warn(`FX Bus: could not find native ${layer} controls.`);
+    return false;
+  }
+
+  const toolName = getNativeSelectToolName(control);
+
   try {
-    await activateFxBusSelectionModeForTab(tabId);
+    await controlsUi.activate({ control: control.name, tool: toolName });
+    return true;
   } catch (err) {
-    console.warn("[FX Bus] Panel tab selection-mode activation failed.", {
-      tabId,
+    console.warn("[FX Bus] Native selection activation failed.", {
+      selectionLayer: layer,
+      controlName: control.name,
+      toolName,
       err
     });
+
+    ui.notifications.warn(`FX Bus: failed to activate ${layer} selection.`);
+    return false;
   }
 }
 
+function getTabDefById(app, tabId) {
+  /**
+   * Large comment:
+   * Resolve a tab definition from the app's tab list.
+   *
+   * This centralises tab lookup so selection-layer activation, macro export, and
+   * any future tab-level metadata can share the same lookup logic.
+   */
+  const id = String(tabId ?? "");
+  if (!id) return null;
+
+  return app?._tabs?.find?.((t) => t?.id === id) ?? null;
+}
+
+async function activatePanelSelectionMode(app, tabId) {
+  /**
+   * Large comment:
+   * Activate the native Foundry selection layer declared by the active tab.
+   *
+   * The tab owns this decision through tabDef.selectionLayer:
+   * - "tokens" for token-based FX
+   * - "tiles" for tile-based FX
+   * - null/undefined for screen FX
+   */
+  const tabDef = getTabDefById(app, tabId);
+  const selectionLayer = tabDef?.selectionLayer ?? null;
+
+  if (!selectionLayer) return;
+
+  await activateNativeSelectionLayer(selectionLayer);
+}
+
 function wireTabClicks(app, root, abortSignal) {
+  /**
+   * Large comment:
+   * Wire panel tab navigation.
+   *
+   * Tab clicks change the visible panel tab and activate any native Foundry
+   * selection layer declared by the clicked tab's metadata.
+   */
   const nav = root.querySelector(".tabs[data-group='fxbus']");
   if (!nav) return;
 
@@ -296,7 +448,7 @@ function wireTabClicks(app, root, abortSignal) {
       app._activeTab = tabId;
       setActiveTab(root, tabId);
 
-      await activatePanelSelectionMode(tabId);
+      await activatePanelSelectionMode(app, tabId);
       await writeState({ __activeTab: tabId });
     },
     { capture: true, signal: abortSignal }
@@ -307,7 +459,7 @@ function getActiveTabDef(app) {
   const tabId = String(app?._activeTab ?? "");
   if (!tabId) return null;
 
-  return app?._tabs?.find?.((t) => t?.id === tabId) ?? null;
+  return getTabDefById(app, tabId);
 }
 
 function getFxBusModuleVersion() {
@@ -376,7 +528,7 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
    * - tabDef.buildMacroSource(root, runtime, options)
    *
    * The custom path exists for effects whose macro behaviour cannot safely be
-   * represented by a static payload. Token Laser authoritative toggles are the
+   * represented by a static payload. Token Tether authoritative toggles are the
    * main example: the macro must decide start vs stop at run time using GM-local
    * state, then emit an explicit action to every client.
    */
@@ -535,6 +687,21 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     wireStatePersistence(root);
     setActiveTab(root, this._activeTab);
+
+    /**
+     * Large comment:
+     * Keep direct panel opens consistent with panel tab clicks.
+     *
+     * Direct opens from scene-control buttons set _requestedStartTab, which
+     * becomes _activeTab during _prepareContext(). If that active tab declares a
+     * native selectionLayer, activate it now.
+     */
+    activatePanelSelectionMode(this, this._activeTab).catch((err) => {
+      console.warn("[FX Bus] Initial panel selection-layer activation failed.", {
+        tabId: this._activeTab,
+        err
+      });
+    });
 
     try {
       this._tabAbort?.abort?.();

@@ -1,16 +1,24 @@
 // D:\FoundryVTT\Data\modules\fxbus\scripts\effects\tokenLaserFx.js
 
 /**
- * FX Bus - Token Laser FX
+ * FX Bus - Token Laser / Token Tether FX
  *
  * Purpose:
- * - Draw persistent visual-only laser links between tokens.
- * - Support preconfigured macro toggles via stable laserId.
- * - Keep lasers visible independently of token visibility.
- * - Make laser anchors follow rendered token position, including token oscillation.
+ * - Draw persistent visual-only links between tokens.
+ * - Support laser, beam, arc, rope, chain, and cable styles.
+ * - Keep links procedural. No texture files. No tile documents. No scene mutation.
+ * - Keep links visible independently of token visibility.
+ * - Make anchors follow rendered token position, including token oscillation.
  * - Optionally draw moving packets along the path for flow/data/power effects.
- * - Support above, below, and split token-layer rendering.
- * - Provide defensive hard cleanup for reset recovery.
+ * - Provide defensive cleanup for reset recovery.
+ *
+ * v14-safe render model:
+ * - Do not attach custom graphics to canvas.tokens or TokenLayer5e.
+ * - Below-token graphics render through canvas.primary.
+ * - Above-token graphics render through canvas.app.stage.
+ * - Split mode draws body below tokens and highlights/packets/flares above tokens.
+ * - Validate graphics and anchors every tick.
+ * - Stop and clean up if token references or graphics become invalid.
  *
  * Actions:
  * - fx.tokenLaser.start
@@ -19,47 +27,6 @@
  * - fx.tokenLaser.update
  * - fx.tokenLaser.stopAll
  * - fx.tokenLaser.hardReset
- *
- * Payload fields:
- * - laserId: string
- *     Stable id for toggling and stopping. Macros should use a fixed value.
- * - sourceTokenId: string
- *     Source token id.
- * - targetTokenIds: string[]
- *     Target token ids. One laser network may target several tokens.
- * - linkMode: "source" | "network"
- *     source = source token connects to every target.
- *     network = every listed token connects to every other listed token once.
- * - layerMode: "above" | "below" | "split"
- *     above = all laser graphics render above tokens.
- *     below = all laser graphics render below tokens.
- *     split = beam/laser body below tokens, highlights/packets/flares above tokens.
- * - colour: string | number
- *     Hex colour. Accepts "#ff0000", "ff0000", or 0xff0000.
- * - width: number
- *     Core laser width in pixels.
- * - alpha: number
- *     Main laser opacity.
- * - glow: boolean
- *     Draw wider translucent glow lines behind the core.
- * - pulse: boolean
- *     Animate alpha.
- * - pulseSpeed: number
- *     Pulse speed in cycles per second.
- * - style: "laser" | "beam" | "arc"
- *     Visual style.
- * - flowDirection: "none" | "forward" | "reverse" | "pingpong"
- *     Moving packet direction.
- * - flowSpeed: number
- *     Packet travel speed in path cycles per second.
- * - flowCount: number
- *     Number of moving packets per line.
- * - flowSize: number
- *     Packet radius in pixels. 0 = auto.
- * - flowColour: string | number
- *     Moving packet colour. Accepts "#ffffff", "ffffff", or 0xffffff.
- * - durationMs: number
- *     0 means run until stopped.
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
@@ -76,6 +43,9 @@ const ACTION_HARD_RESET = "fx.tokenLaser.hardReset";
 
 const DEFAULTS = {
   colour: 0xff2222,
+  secondaryColour: 0xffffff,
+  outlineColour: 0x000000,
+
   width: 4,
   alpha: 0.95,
   glow: true,
@@ -84,6 +54,20 @@ const DEFAULTS = {
   style: "laser",
   linkMode: "network",
   layerMode: "split",
+
+  sagPx: 0,
+  segments: 24,
+
+  twistFreq: 0.45,
+  twistSpeed: 1.2,
+
+  swayPx: 0,
+  swayHz: 0.8,
+
+  linkSpacingPx: 14,
+  linkLengthPx: 16,
+  linkWidthPx: 7,
+
   flowDirection: "none",
   flowSpeed: 1.5,
   flowCount: 3,
@@ -99,9 +83,10 @@ const DEFAULTS = {
 function getStore(runtime) {
   /**
    * Large comment:
-   * Store token laser state under runtime.tokenFx so it follows the existing
-   * token-linked FX model. The map is keyed by laserId rather than tokenId
-   * because one laser network can connect multiple token pairs.
+   * Store token laser/link state under runtime.tokenFx.
+   *
+   * The map is keyed by laserId rather than tokenId because one visual network
+   * can connect multiple token pairs.
    */
   if (!runtime.tokenFx.has(EFFECT_NAME)) {
     runtime.tokenFx.set(EFFECT_NAME, new Map());
@@ -151,7 +136,11 @@ function coerceColour(value, fallback = DEFAULTS.colour) {
 
 function coerceStyle(value) {
   const s = String(value ?? DEFAULTS.style).trim();
-  if (["laser", "beam", "arc"].includes(s)) return s;
+
+  if (["laser", "beam", "arc", "rope", "chain", "cable"].includes(s)) {
+    return s;
+  }
+
   return DEFAULTS.style;
 }
 
@@ -169,7 +158,11 @@ function coerceLayerMode(value) {
 
 function coerceFlowDirection(value) {
   const s = String(value ?? DEFAULTS.flowDirection).trim();
-  if (["none", "forward", "reverse", "pingpong"].includes(s)) return s;
+
+  if (["none", "forward", "reverse", "pingpong"].includes(s)) {
+    return s;
+  }
+
   return DEFAULTS.flowDirection;
 }
 
@@ -187,6 +180,7 @@ function makeLaserId(payload) {
 
   const source = String(payload?.sourceTokenId ?? "source").trim() || "source";
   const targets = coerceTokenIds(payload?.targetTokenIds).join("-");
+
   return `laser-${source}-${targets || Date.now()}`;
 }
 
@@ -198,8 +192,12 @@ function normalisePayload(payload) {
     laserId: makeLaserId(payload),
     sourceTokenId,
     targetTokenIds,
-    colour: coerceColour(payload?.colour),
-    width: coerceNumber(payload?.width, DEFAULTS.width, 1, 40),
+
+    colour: coerceColour(payload?.colour, DEFAULTS.colour),
+    secondaryColour: coerceColour(payload?.secondaryColour, DEFAULTS.secondaryColour),
+    outlineColour: coerceColour(payload?.outlineColour, DEFAULTS.outlineColour),
+
+    width: coerceNumber(payload?.width, DEFAULTS.width, 1, 80),
     alpha: coerceNumber(payload?.alpha, DEFAULTS.alpha, 0, 1),
     glow: coerceBoolean(payload?.glow, DEFAULTS.glow),
     pulse: coerceBoolean(payload?.pulse, DEFAULTS.pulse),
@@ -207,10 +205,24 @@ function normalisePayload(payload) {
     style: coerceStyle(payload?.style),
     linkMode: coerceLinkMode(payload?.linkMode),
     layerMode: coerceLayerMode(payload?.layerMode),
+
+    sagPx: coerceNumber(payload?.sagPx, DEFAULTS.sagPx, -500, 500),
+    segments: Math.round(coerceNumber(payload?.segments, DEFAULTS.segments, 4, 128)),
+
+    twistFreq: coerceNumber(payload?.twistFreq, DEFAULTS.twistFreq, 0, 10),
+    twistSpeed: coerceNumber(payload?.twistSpeed, DEFAULTS.twistSpeed, -20, 20),
+
+    swayPx: coerceNumber(payload?.swayPx, DEFAULTS.swayPx, 0, 200),
+    swayHz: coerceNumber(payload?.swayHz, DEFAULTS.swayHz, 0, 20),
+
+    linkSpacingPx: coerceNumber(payload?.linkSpacingPx, DEFAULTS.linkSpacingPx, 4, 120),
+    linkLengthPx: coerceNumber(payload?.linkLengthPx, DEFAULTS.linkLengthPx, 4, 160),
+    linkWidthPx: coerceNumber(payload?.linkWidthPx, DEFAULTS.linkWidthPx, 2, 120),
+
     flowDirection: coerceFlowDirection(payload?.flowDirection),
     flowSpeed: coerceNumber(payload?.flowSpeed, DEFAULTS.flowSpeed, 0, 20),
-    flowCount: Math.round(coerceNumber(payload?.flowCount, DEFAULTS.flowCount, 1, 20)),
-    flowSize: coerceNumber(payload?.flowSize, DEFAULTS.flowSize, 0, 60),
+    flowCount: Math.round(coerceNumber(payload?.flowCount, DEFAULTS.flowCount, 1, 40)),
+    flowSize: coerceNumber(payload?.flowSize, DEFAULTS.flowSize, 0, 80),
     flowColour: coerceColour(payload?.flowColour, DEFAULTS.flowColour),
     durationMs: coerceNumber(payload?.durationMs, DEFAULTS.durationMs, 0, 600000)
   };
@@ -224,55 +236,106 @@ function getTokenById(tokenId) {
   if (!tokenId) return null;
 
   const placeables = canvas?.tokens?.placeables ?? [];
-  return placeables.find((token) => token?.id === tokenId) ?? null;
+
+  return placeables.find((token) => {
+    return token?.id === tokenId || token?.document?.id === tokenId;
+  }) ?? null;
+}
+
+function getBelowLaserParent() {
+  /**
+   * Large comment:
+   * Return the parent used for below-token laser graphics.
+   *
+   * Probe result:
+   * - canvas.primary renders below token art.
+   */
+  return canvas?.primary ?? null;
+}
+
+function getAboveLaserParent() {
+  /**
+   * Large comment:
+   * Return the parent used for above-token laser graphics.
+   *
+   * Probe result:
+   * - canvas.app.stage renders above token art.
+   *
+   * Do not use canvas.tokens here. It renders above, but it was previously a
+   * crash candidate because it touches TokenLayer internals.
+   */
+  return canvas?.app?.stage ?? null;
 }
 
 function getLaserParent() {
   /**
    * Large comment:
-   * Lasers must not be attached to source or target tokens. Their visibility
-   * should be independent of token visibility, alpha, hidden state, and token
-   * render effects. The token only controls endpoint sampling.
+   * Legacy helper used for anchor conversion.
+   *
+   * The below graphics live in canvas.primary, so anchors are converted into
+   * that scene-space parent. Above graphics use matching scene coordinates when
+   * drawn into the stage overlay.
    */
-  return canvas?.tokens ?? canvas?.app?.stage ?? null;
+  return getBelowLaserParent() ?? getAboveLaserParent();
 }
 
 function configureContainer(container, name, zIndex) {
   container.name = name;
   container.sortableChildren = true;
   container.zIndex = zIndex;
-  container.eventMode = "none";
   container.interactive = false;
   container.interactiveChildren = false;
+
+  try {
+    container.eventMode = "none";
+  } catch {
+    // ignore
+  }
 }
 
 function ensureLaserContainers() {
   /**
    * Large comment:
-   * Maintain two persistent FX containers:
-   * - below: intended to sit underneath token art
-   * - above: intended to sit above token art
+   * Maintain two persistent FX containers using the proven safe parent pair.
    *
-   * Individual laser states own their own PIXI.Graphics objects inside these
-   * containers. This allows split rendering without coupling graphics to token
-   * visibility or token display hierarchy.
+   * Probe result:
+   * - canvas.primary renders below token art.
+   * - canvas.app.stage renders above token art.
+   *
+   * Therefore:
+   * - below/body graphics go into canvas.primary
+   * - above/highlight graphics go into canvas.app.stage
    */
-  const parent = getLaserParent();
-  if (!parent) return null;
+  const belowParent = getBelowLaserParent();
+  const aboveParent = getAboveLaserParent();
+
+  if (!belowParent || !aboveParent) return null;
 
   const key = "__fxbusTokenLaserContainers";
 
+  const existingBelow = belowParent[key]?.below;
+  const existingAbove = aboveParent[key]?.above;
+
   if (
-    parent[key]?.below &&
-    parent[key]?.above &&
-    !parent[key].below.destroyed &&
-    !parent[key].above.destroyed
+    existingBelow &&
+    existingAbove &&
+    !existingBelow.destroyed &&
+    !existingAbove.destroyed
   ) {
-    return parent[key];
+    return {
+      below: existingBelow,
+      above: existingAbove
+    };
   }
 
   try {
-    parent.sortableChildren = true;
+    belowParent.sortableChildren = true;
+  } catch {
+    // ignore
+  }
+
+  try {
+    aboveParent.sortableChildren = true;
   } catch {
     // ignore
   }
@@ -280,59 +343,94 @@ function ensureLaserContainers() {
   const below = new PIXI.Container();
   const above = new PIXI.Container();
 
-  configureContainer(below, "FXBus.TokenLaser.BelowTokens", -10_000);
+  configureContainer(below, "FXBus.TokenLaser.BelowTokens", 10_000);
   configureContainer(above, "FXBus.TokenLaser.AboveTokens", 10_000);
 
   try {
-    parent.addChildAt(below, 0);
-  } catch {
-    parent.addChild(below);
+    belowParent.addChild(below);
+    aboveParent.addChild(above);
+  } catch (err) {
+    console.warn("[FX Bus] Token Laser container creation failed.", err);
+    return null;
   }
 
-  parent.addChild(above);
+  try {
+    belowParent.sortChildren?.();
+  } catch {
+    // ignore
+  }
 
-  parent[key] = { below, above };
+  try {
+    aboveParent.sortChildren?.();
+  } catch {
+    // ignore
+  }
 
-  return parent[key];
+  belowParent[key] = {
+    ...(belowParent[key] ?? {}),
+    below
+  };
+
+  aboveParent[key] = {
+    ...(aboveParent[key] ?? {}),
+    above
+  };
+
+  return { below, above };
+}
+
+function destroyGraphics(graphics) {
+  if (!graphics) return;
+
+  try {
+    if (graphics.destroyed) return;
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (graphics.parent) graphics.parent.removeChild(graphics);
+  } catch {
+    // ignore
+  }
+
+  try {
+    graphics.clear?.();
+  } catch {
+    // ignore
+  }
+
+  try {
+    graphics.destroy({ children: true });
+  } catch {
+    try {
+      graphics.destroy();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 function destroyLaserContainers() {
   /**
    * Large comment:
-   * Hard-remove all persistent Token Laser containers from the canvas parent.
-   *
-   * This is deliberately more aggressive than stopAllLasers(). It is used by
-   * global reset recovery to remove orphaned graphics that may no longer be
-   * tracked in runtime.tokenFx, for example after stale client state or failed
-   * development reloads.
+   * Hard-remove all persistent Token Laser containers from every parent that may
+   * have been used by current or older builds.
    */
-  const parent = getLaserParent();
-  if (!parent) return;
+  const parents = [
+    getBelowLaserParent(),
+    getAboveLaserParent(),
+    canvas?.primary,
+    canvas?.app?.stage,
+    canvas?.effects,
+    canvas?.interface,
+    canvas?.tokens
+  ].filter((parent, index, arr) => {
+    return parent && arr.indexOf(parent) === index;
+  });
 
   const key = "__fxbusTokenLaserContainers";
-  const containers = parent[key];
-
-  if (containers?.below) destroyGraphics(containers.below);
-  if (containers?.above) destroyGraphics(containers.above);
-
-  try {
-    delete parent[key];
-  } catch {
-    parent[key] = null;
-  }
-
   const legacyKey = "__fxbusTokenLaserContainer";
-  const legacy = parent[legacyKey];
-
-  if (legacy) {
-    destroyGraphics(legacy);
-
-    try {
-      delete parent[legacyKey];
-    } catch {
-      parent[legacyKey] = null;
-    }
-  }
 
   const names = new Set([
     "FXBus.TokenLaser.Container",
@@ -340,19 +438,45 @@ function destroyLaserContainers() {
     "FXBus.TokenLaser.AboveTokens"
   ]);
 
-  try {
-    for (const child of Array.from(parent.children ?? [])) {
-      if (names.has(child?.name)) {
-        destroyGraphics(child);
+  for (const parent of parents) {
+    const containers = parent[key];
+
+    if (containers?.below) destroyGraphics(containers.below);
+    if (containers?.above) destroyGraphics(containers.above);
+
+    try {
+      delete parent[key];
+    } catch {
+      parent[key] = null;
+    }
+
+    const legacy = parent[legacyKey];
+
+    if (legacy) {
+      destroyGraphics(legacy);
+
+      try {
+        delete parent[legacyKey];
+      } catch {
+        parent[legacyKey] = null;
       }
     }
-  } catch {
-    // ignore
+
+    try {
+      for (const child of Array.from(parent.children ?? [])) {
+        if (names.has(child?.name)) {
+          destroyGraphics(child);
+        }
+      }
+    } catch {
+      // ignore
+    }
   }
 }
 
 function getTokenDocumentCentre(token) {
   const centre = token?.center;
+
   if (centre && Number.isFinite(centre.x) && Number.isFinite(centre.y)) {
     return { x: centre.x, y: centre.y };
   }
@@ -372,8 +496,9 @@ function getTokenRenderedAnchor(token) {
   /**
    * Large comment:
    * Anchor sampling uses rendered bounds first, not document coordinates.
-   * This allows the laser to follow visual-only render transforms such as
-   * token oscillation, bobbing, swaying, or other PIXI-level offsets.
+   *
+   * This allows the link to follow visual-only render transforms such as token
+   * oscillation, bobbing, swaying, or other PIXI-level offsets.
    */
   if (!token) return null;
 
@@ -403,13 +528,9 @@ function getTokenRenderedAnchor(token) {
     );
 
     const parent = getLaserParent();
+
     if (parent && typeof parent.toLocal === "function") {
       const local = parent.toLocal(globalCentre);
-      return { x: local.x, y: local.y };
-    }
-
-    if (canvas?.app?.stage && typeof canvas.app.stage.toLocal === "function") {
-      const local = canvas.app.stage.toLocal(globalCentre);
       return { x: local.x, y: local.y };
     }
 
@@ -422,38 +543,114 @@ function getTokenRenderedAnchor(token) {
   }
 }
 
-function destroyGraphics(graphics) {
-  if (!graphics) return;
+function makeLaserGraphics(name) {
+  const graphics = new PIXI.Graphics();
+
+  graphics.name = name;
+  graphics.zIndex = 0;
+  graphics.interactive = false;
+  graphics.interactiveChildren = false;
 
   try {
-    if (graphics.parent) graphics.parent.removeChild(graphics);
+    graphics.eventMode = "none";
   } catch {
     // ignore
   }
 
-  try {
-    graphics.destroy({ children: true });
-  } catch {
-    try {
-      graphics.destroy();
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function makeLaserGraphics(name) {
-  const graphics = new PIXI.Graphics();
-  graphics.name = name;
-  graphics.zIndex = 0;
-  graphics.eventMode = "none";
-  graphics.interactive = false;
-  graphics.interactiveChildren = false;
   return graphics;
 }
 
 /* -------------------------------------------- */
-/* Drawing                                      */
+/* Geometry                                     */
+/* -------------------------------------------- */
+
+function distanceBetween(a, b) {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+function buildCurvePoints(from, to, state) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+
+  if (length <= 0.001) return [from, to];
+
+  const nx = -dy / length;
+  const ny = dx / length;
+
+  const count = Math.max(4, Math.floor(state.segments ?? DEFAULTS.segments));
+  const time = state.elapsedMs / 1000;
+
+  const points = [];
+
+  for (let i = 0; i <= count; i += 1) {
+    const t = i / count;
+
+    const baseX = from.x + dx * t;
+    const baseY = from.y + dy * t;
+
+    const envelope = Math.sin(Math.PI * t);
+    const sag = envelope * state.sagPx;
+
+    const sway =
+      Math.sin((time * state.swayHz * Math.PI * 2) + (t * Math.PI * 2)) *
+      state.swayPx *
+      envelope;
+
+    points.push({
+      x: baseX + nx * sway,
+      y: baseY + sag + ny * sway,
+      t
+    });
+  }
+
+  return points;
+}
+
+function getCurveLength(points) {
+  let length = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    length += distanceBetween(points[i - 1], points[i]);
+  }
+
+  return length;
+}
+
+function sampleCurveAtT(points, t) {
+  if (!Array.isArray(points) || points.length === 0) return null;
+  if (points.length === 1) return points[0];
+
+  const total = getCurveLength(points);
+  if (total <= 0.001) return points[0];
+
+  const targetDistance = clamp(t, 0, 1) * total;
+  let travelled = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segmentLength = distanceBetween(a, b);
+
+    if (segmentLength <= 0.001) continue;
+
+    if (travelled + segmentLength >= targetDistance) {
+      const local = (targetDistance - travelled) / segmentLength;
+
+      return {
+        x: a.x + (b.x - a.x) * local,
+        y: a.y + (b.y - a.y) * local
+      };
+    }
+
+    travelled += segmentLength;
+  }
+
+  return points[points.length - 1];
+}
+
+/* -------------------------------------------- */
+/* Drawing basics                               */
 /* -------------------------------------------- */
 
 function currentAlpha(state) {
@@ -465,19 +662,64 @@ function currentAlpha(state) {
   return clamp(state.alpha * (0.65 + 0.35 * wave), 0, 1);
 }
 
-function drawStraightLine(graphics, from, to, colour, width, alpha) {
-  if (!graphics) return;
+function applyLineStyle(graphics, width, colour, alpha) {
+  if (!graphics || graphics.destroyed) return;
 
-  graphics.lineStyle({
-    width,
-    color: colour,
-    alpha,
-    cap: PIXI.LINE_CAP.ROUND,
-    join: PIXI.LINE_JOIN.ROUND
-  });
+  try {
+    graphics.lineStyle({
+      width,
+      color: colour,
+      alpha,
+      cap: PIXI.LINE_CAP?.ROUND,
+      join: PIXI.LINE_JOIN?.ROUND
+    });
+  } catch {
+    try {
+      graphics.lineStyle(width, colour, alpha);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function beginFill(graphics, colour, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  try {
+    graphics.beginFill(colour, alpha);
+  } catch {
+    // ignore
+  }
+}
+
+function endFill(graphics) {
+  try {
+    graphics?.endFill?.();
+  } catch {
+    // ignore
+  }
+}
+
+function drawStraightLine(graphics, from, to, colour, width, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  applyLineStyle(graphics, width, colour, alpha);
 
   graphics.moveTo(from.x, from.y);
   graphics.lineTo(to.x, to.y);
+}
+
+function drawPolyline(graphics, points, colour, width, alpha) {
+  if (!graphics || graphics.destroyed) return;
+  if (!Array.isArray(points) || points.length < 2) return;
+
+  applyLineStyle(graphics, width, colour, alpha);
+
+  graphics.moveTo(points[0].x, points[0].y);
+
+  for (let i = 1; i < points.length; i += 1) {
+    graphics.lineTo(points[i].x, points[i].y);
+  }
 }
 
 function getBodyGraphics(state) {
@@ -490,14 +732,12 @@ function getOverlayGraphics(state) {
   return state.aboveGraphics;
 }
 
+/* -------------------------------------------- */
+/* Laser, beam, arc                             */
+/* -------------------------------------------- */
+
 function drawArcLine(graphics, from, to, state, alpha) {
-  /**
-   * Large comment:
-   * Arc style is deterministic. It does not use random values per frame, so
-   * all clients draw the same unstable-looking path from the same payload and
-   * elapsed time. This keeps the visual consistent without synchronising RNG.
-   */
-  if (!graphics) return;
+  if (!graphics || graphics.destroyed) return;
 
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -512,13 +752,7 @@ function drawArcLine(graphics, from, to, state, alpha) {
   const time = state.elapsedMs / 1000;
   const amp = clamp(state.width * 2.5, 4, 28);
 
-  graphics.lineStyle({
-    width: Math.max(1, state.width),
-    color: state.colour,
-    alpha,
-    cap: PIXI.LINE_CAP.ROUND,
-    join: PIXI.LINE_JOIN.ROUND
-  });
+  applyLineStyle(graphics, Math.max(1, state.width), state.colour, alpha);
 
   for (let i = 0; i <= segments; i += 1) {
     const t = i / segments;
@@ -541,19 +775,260 @@ function drawArcLine(graphics, from, to, state, alpha) {
 }
 
 function drawEndpointFlare(graphics, point, state, alpha) {
-  if (!graphics) return;
+  if (!graphics || graphics.destroyed) return;
 
   const outerRadius = Math.max(state.width * 2.2, 6);
   const innerRadius = Math.max(state.width * 0.75, 2);
 
-  graphics.beginFill(state.colour, alpha * 0.35);
+  beginFill(graphics, state.colour, alpha * 0.35);
   graphics.drawCircle(point.x, point.y, outerRadius);
-  graphics.endFill();
+  endFill(graphics);
 
-  graphics.beginFill(0xffffff, alpha * 0.75);
+  beginFill(graphics, state.secondaryColour, alpha * 0.75);
   graphics.drawCircle(point.x, point.y, innerRadius);
-  graphics.endFill();
+  endFill(graphics);
 }
+
+/* -------------------------------------------- */
+/* Procedural rope                              */
+/* -------------------------------------------- */
+
+function drawRopeLink(graphics, from, to, state, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  const points = buildCurvePoints(from, to, state);
+  const width = Math.max(2, state.width);
+
+  drawPolyline(graphics, points, state.outlineColour, width + 4, alpha * 0.85);
+  drawPolyline(graphics, points, state.colour, width, alpha);
+
+  const twistSpacing = Math.max(4, width * 1.25);
+  let carried = 0;
+  let markIndex = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const segmentLength = Math.hypot(dx, dy);
+
+    if (segmentLength <= 0.001) continue;
+
+    const ux = dx / segmentLength;
+    const uy = dy / segmentLength;
+    const nx = -uy;
+    const ny = ux;
+
+    for (let d = twistSpacing - carried; d < segmentLength; d += twistSpacing) {
+      const t = d / segmentLength;
+      const x = a.x + dx * t;
+      const y = a.y + dy * t;
+
+      const slant = markIndex % 2 === 0 ? 1 : -1;
+      const half = width * 0.55;
+      const along = width * 0.45;
+
+      applyLineStyle(
+        graphics,
+        Math.max(1, width * 0.22),
+        state.secondaryColour,
+        alpha * 0.75
+      );
+
+      graphics.moveTo(
+        x - nx * half - ux * along * slant,
+        y - ny * half - uy * along * slant
+      );
+
+      graphics.lineTo(
+        x + nx * half + ux * along * slant,
+        y + ny * half + uy * along * slant
+      );
+
+      markIndex += 1;
+    }
+
+    carried = (carried + segmentLength) % twistSpacing;
+  }
+}
+
+/* -------------------------------------------- */
+/* Procedural chain                             */
+/* -------------------------------------------- */
+
+function drawOvalStroke(graphics, transform, length, width, steps) {
+  for (let i = 0; i <= steps; i += 1) {
+    const t = (i / steps) * Math.PI * 2;
+    const px = Math.cos(t) * length * 0.5;
+    const py = Math.sin(t) * width * 0.5;
+    const p = transform(px, py);
+
+    if (i === 0) graphics.moveTo(p.x, p.y);
+    else graphics.lineTo(p.x, p.y);
+  }
+}
+
+function drawProceduralChainOval(graphics, x, y, rotation, length, width, state, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  const steps = 14;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+
+  function transform(px, py) {
+    return {
+      x: x + px * cos - py * sin,
+      y: y + px * sin + py * cos
+    };
+  }
+
+  applyLineStyle(
+    graphics,
+    Math.max(1, state.width * 0.35),
+    state.outlineColour,
+    alpha * 0.9
+  );
+
+  drawOvalStroke(graphics, transform, length + 3, width + 3, steps);
+
+  applyLineStyle(
+    graphics,
+    Math.max(1, state.width * 0.25),
+    state.colour,
+    alpha
+  );
+
+  drawOvalStroke(graphics, transform, length, width, steps);
+
+  applyLineStyle(
+    graphics,
+    Math.max(1, state.width * 0.12),
+    state.secondaryColour,
+    alpha * 0.75
+  );
+
+  drawOvalStroke(graphics, transform, length * 0.65, width * 0.55, steps);
+}
+
+function drawChainLink(graphics, from, to, state, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  const points = buildCurvePoints(from, to, state);
+  const spacing = Math.max(4, state.linkSpacingPx);
+  const linkLength = Math.max(4, state.linkLengthPx);
+  const linkWidth = Math.max(2, state.linkWidthPx);
+
+  let travelled = 0;
+  let nextAt = 0;
+  let index = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const segmentLength = Math.hypot(dx, dy);
+
+    if (segmentLength <= 0.001) continue;
+
+    while (nextAt <= travelled + segmentLength) {
+      const local = (nextAt - travelled) / segmentLength;
+      const x = a.x + dx * local;
+      const y = a.y + dy * local;
+
+      const tangent = Math.atan2(dy, dx);
+      const rotation = tangent + (index % 2 === 0 ? 0 : Math.PI / 2);
+
+      drawProceduralChainOval(
+        graphics,
+        x,
+        y,
+        rotation,
+        linkLength,
+        linkWidth,
+        state,
+        alpha
+      );
+
+      nextAt += spacing;
+      index += 1;
+    }
+
+    travelled += segmentLength;
+  }
+}
+
+/* -------------------------------------------- */
+/* Procedural cable                             */
+/* -------------------------------------------- */
+
+function drawCableLink(graphics, from, to, state, alpha) {
+  if (!graphics || graphics.destroyed) return;
+
+  const points = buildCurvePoints(from, to, state);
+  const width = Math.max(2, state.width);
+
+  drawPolyline(graphics, points, state.outlineColour, width + 5, alpha * 0.9);
+  drawPolyline(graphics, points, state.colour, width, alpha);
+  drawPolyline(
+    graphics,
+    points,
+    state.secondaryColour,
+    Math.max(1, width * 0.22),
+    alpha * 0.65
+  );
+
+  const ribSpacing = Math.max(8, width * 2.2);
+  let carried = 0;
+
+  for (let i = 1; i < points.length; i += 1) {
+    const a = points[i - 1];
+    const b = points[i];
+
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const segmentLength = Math.hypot(dx, dy);
+
+    if (segmentLength <= 0.001) continue;
+
+    const ux = dx / segmentLength;
+    const uy = dy / segmentLength;
+    const nx = -uy;
+    const ny = ux;
+
+    for (let d = ribSpacing - carried; d < segmentLength; d += ribSpacing) {
+      const t = d / segmentLength;
+      const x = a.x + dx * t;
+      const y = a.y + dy * t;
+
+      applyLineStyle(
+        graphics,
+        Math.max(1, width * 0.14),
+        state.outlineColour,
+        alpha * 0.55
+      );
+
+      graphics.moveTo(
+        x - nx * width * 0.55 - ux * width * 0.25,
+        y - ny * width * 0.55 - uy * width * 0.25
+      );
+
+      graphics.lineTo(
+        x + nx * width * 0.55 + ux * width * 0.25,
+        y + ny * width * 0.55 + uy * width * 0.25
+      );
+    }
+
+    carried = (carried + segmentLength) % ribSpacing;
+  }
+}
+
+/* -------------------------------------------- */
+/* Flow packets                                 */
+/* -------------------------------------------- */
 
 function getFlowT(state, index, count) {
   const seconds = state.elapsedMs / 1000;
@@ -572,16 +1047,24 @@ function getFlowT(state, index, count) {
   return (seconds * speed + offset) % 1;
 }
 
+function drawFlowPacketAt(graphics, point, size, colour, alpha) {
+  if (!graphics || graphics.destroyed || !point) return;
+
+  beginFill(graphics, colour, alpha * 0.35);
+  graphics.drawCircle(point.x, point.y, size * 1.8);
+  endFill(graphics);
+
+  beginFill(graphics, colour, alpha * 0.95);
+  graphics.drawCircle(point.x, point.y, size);
+  endFill(graphics);
+
+  beginFill(graphics, 0xffffff, alpha * 0.8);
+  graphics.drawCircle(point.x, point.y, Math.max(1, size * 0.35));
+  endFill(graphics);
+}
+
 function drawFlowPackets(graphics, from, to, state, alpha) {
-  /**
-   * Large comment:
-   * Draw moving packets along the laser path.
-   *
-   * This is visual-only and deterministic. The packets are derived from elapsed
-   * time, packet index, and path endpoints, so clients render equivalent motion
-   * without synchronising particle state.
-   */
-  if (!graphics) return;
+  if (!graphics || graphics.destroyed) return;
   if (state.flowDirection === "none" || state.flowSpeed <= 0) return;
 
   const dx = to.x - from.x;
@@ -597,27 +1080,67 @@ function drawFlowPackets(graphics, from, to, state, alpha) {
 
   for (let i = 0; i < count; i += 1) {
     const t = getFlowT(state, i, count);
-    const x = from.x + dx * t;
-    const y = from.y + dy * t;
 
-    graphics.beginFill(state.flowColour, alpha * 0.35);
-    graphics.drawCircle(x, y, size * 1.8);
-    graphics.endFill();
-
-    graphics.beginFill(state.flowColour, alpha * 0.95);
-    graphics.drawCircle(x, y, size);
-    graphics.endFill();
-
-    graphics.beginFill(0xffffff, alpha * 0.8);
-    graphics.drawCircle(x, y, Math.max(1, size * 0.35));
-    graphics.endFill();
+    drawFlowPacketAt(
+      graphics,
+      {
+        x: from.x + dx * t,
+        y: from.y + dy * t
+      },
+      size,
+      state.flowColour,
+      alpha
+    );
   }
 }
+
+function drawFlowPacketsOnCurve(graphics, points, state, alpha) {
+  if (!graphics || graphics.destroyed) return;
+  if (state.flowDirection === "none" || state.flowSpeed <= 0) return;
+  if (!Array.isArray(points) || points.length < 2) return;
+
+  const count = Math.max(1, Math.floor(state.flowCount));
+  const size = state.flowSize > 0
+    ? state.flowSize
+    : Math.max(2, state.width * 1.2);
+
+  for (let i = 0; i < count; i += 1) {
+    const t = getFlowT(state, i, count);
+    const point = sampleCurveAtT(points, t);
+
+    drawFlowPacketAt(graphics, point, size, state.flowColour, alpha);
+  }
+}
+
+/* -------------------------------------------- */
+/* Style routing                                */
+/* -------------------------------------------- */
 
 function drawLaserToTarget(state, from, to) {
   const alpha = currentAlpha(state);
   const body = getBodyGraphics(state);
   const overlay = getOverlayGraphics(state);
+
+  if (state.style === "rope") {
+    const curve = buildCurvePoints(from, to, state);
+    drawRopeLink(body, from, to, state, alpha);
+    drawFlowPacketsOnCurve(overlay, curve, state, alpha);
+    return;
+  }
+
+  if (state.style === "chain") {
+    const curve = buildCurvePoints(from, to, state);
+    drawChainLink(body, from, to, state, alpha);
+    drawFlowPacketsOnCurve(overlay, curve, state, alpha);
+    return;
+  }
+
+  if (state.style === "cable") {
+    const curve = buildCurvePoints(from, to, state);
+    drawCableLink(body, from, to, state, alpha);
+    drawFlowPacketsOnCurve(overlay, curve, state, alpha);
+    return;
+  }
 
   if (state.glow) {
     drawStraightLine(
@@ -641,36 +1164,28 @@ function drawLaserToTarget(state, from, to) {
 
   if (state.style === "arc") {
     drawArcLine(body, from, to, state, alpha);
+
     drawStraightLine(
       overlay,
       from,
       to,
-      0xffffff,
+      state.secondaryColour,
       Math.max(1, state.width * 0.35),
       alpha * 0.75
     );
+
     drawFlowPackets(overlay, from, to, state, alpha);
     return;
   }
 
   if (state.style === "beam") {
-    /**
-     * Large comment:
-     * Beam style is deliberately distinct from laser style.
-     *
-     * Laser reads as a precise line. Beam reads as a sustained energy conduit:
-     * broad translucent body, bright core, and visible endpoint flares.
-     *
-     * In split mode the broad conduit is below tokens, while flares and moving
-     * packets remain above tokens for readability.
-     */
     const bodyWidth = Math.max(state.width * 3.2, state.width + 8);
     const midWidth = Math.max(state.width * 1.8, state.width + 4);
     const coreWidth = Math.max(1, state.width * 0.65);
 
     drawStraightLine(body, from, to, state.colour, bodyWidth, alpha * 0.22);
     drawStraightLine(body, from, to, state.colour, midWidth, alpha * 0.45);
-    drawStraightLine(overlay, from, to, 0xffffff, coreWidth, alpha * 0.75);
+    drawStraightLine(overlay, from, to, state.secondaryColour, coreWidth, alpha * 0.75);
 
     drawEndpointFlare(overlay, from, state, alpha);
     drawEndpointFlare(overlay, to, state, alpha);
@@ -680,29 +1195,24 @@ function drawLaserToTarget(state, from, to) {
   }
 
   drawStraightLine(body, from, to, state.colour, state.width, alpha);
+
   drawStraightLine(
     overlay,
     from,
     to,
-    0xffffff,
+    state.secondaryColour,
     Math.max(1, state.width * 0.25),
     alpha * 0.9
   );
+
   drawFlowPackets(overlay, from, to, state, alpha);
 }
 
+/* -------------------------------------------- */
+/* Pairing and redraw                           */
+/* -------------------------------------------- */
+
 function getLaserPairs(state) {
-  /**
-   * Large comment:
-   * Build the token-id pairs connected by this laser network.
-   *
-   * source mode:
-   * - source token connects to every target token.
-   *
-   * network mode:
-   * - every selected token connects to every other selected token once.
-   * - three tokens produce A-B, A-C, B-C.
-   */
   const ids = [
     state.sourceTokenId,
     ...state.targetTokenIds
@@ -729,11 +1239,23 @@ function getLaserPairs(state) {
 }
 
 function clearLaserGraphics(state) {
-  state.belowGraphics?.clear?.();
-  state.aboveGraphics?.clear?.();
+  try {
+    if (!state?.belowGraphics?.destroyed) state.belowGraphics?.clear?.();
+  } catch {
+    // ignore
+  }
+
+  try {
+    if (!state?.aboveGraphics?.destroyed) state.aboveGraphics?.clear?.();
+  } catch {
+    // ignore
+  }
 }
 
 function redrawLaser(state) {
+  if (!state) return false;
+  if (state.belowGraphics?.destroyed || state.aboveGraphics?.destroyed) return false;
+
   const pairs = getLaserPairs(state);
 
   clearLaserGraphics(state);
@@ -750,6 +1272,8 @@ function redrawLaser(state) {
     const toAnchor = getTokenRenderedAnchor(toToken);
 
     if (!fromAnchor || !toAnchor) continue;
+    if (!Number.isFinite(fromAnchor.x) || !Number.isFinite(fromAnchor.y)) continue;
+    if (!Number.isFinite(toAnchor.x) || !Number.isFinite(toAnchor.y)) continue;
 
     drawLaserToTarget(state, fromAnchor, toAnchor);
     drawn += 1;
@@ -765,6 +1289,7 @@ function redrawLaser(state) {
 function stopLaser(runtime, laserId) {
   const store = getStore(runtime);
   const id = String(laserId ?? "").trim();
+
   if (!id) return;
 
   const state = store.get(id);
@@ -792,13 +1317,6 @@ function stopAllLasers(runtime) {
 }
 
 function hardResetLasers(runtime) {
-  /**
-   * Large comment:
-   * Stop tracked lasers and also destroy persistent laser containers.
-   *
-   * This recovers clients whose visible laser graphics exist without matching
-   * runtime.tokenFx state.
-   */
   try {
     stopAllLasers(runtime);
   } catch (err) {
@@ -838,6 +1356,7 @@ function startTicker(runtime) {
       }
 
       const ok = redrawLaser(state);
+
       if (!ok) {
         toStop.push(laserId);
       }
@@ -867,6 +1386,7 @@ function startLaser(runtime, payload) {
   }
 
   const containers = ensureLaserContainers();
+
   if (!containers) {
     console.warn("[FX Bus] Token Laser start ignored: no laser containers available.");
     return;
@@ -915,7 +1435,11 @@ function updateLaser(runtime, payload) {
 
   existing.sourceTokenId = data.sourceTokenId;
   existing.targetTokenIds = data.targetTokenIds;
+
   existing.colour = data.colour;
+  existing.secondaryColour = data.secondaryColour;
+  existing.outlineColour = data.outlineColour;
+
   existing.width = data.width;
   existing.alpha = data.alpha;
   existing.glow = data.glow;
@@ -924,6 +1448,17 @@ function updateLaser(runtime, payload) {
   existing.style = data.style;
   existing.linkMode = data.linkMode;
   existing.layerMode = data.layerMode;
+
+  existing.sagPx = data.sagPx;
+  existing.segments = data.segments;
+  existing.twistFreq = data.twistFreq;
+  existing.twistSpeed = data.twistSpeed;
+  existing.swayPx = data.swayPx;
+  existing.swayHz = data.swayHz;
+  existing.linkSpacingPx = data.linkSpacingPx;
+  existing.linkLengthPx = data.linkLengthPx;
+  existing.linkWidthPx = data.linkWidthPx;
+
   existing.flowDirection = data.flowDirection;
   existing.flowSpeed = data.flowSpeed;
   existing.flowCount = data.flowCount;

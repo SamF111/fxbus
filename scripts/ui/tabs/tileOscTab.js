@@ -9,12 +9,17 @@
  *   vents, loose machinery, lamps, foliage, banners, suspended debris.
  *
  * Behaviour:
+ * - Requires native Tiles selection mode.
  * - Apply reads selected native Foundry tiles.
  * - Apply stores those tile IDs.
  * - Apply releases native tile selection before emitting start/update.
  * - Stop uses selected tiles if present.
  * - If no tiles are currently selected, Stop falls back to the last tile IDs used by Apply.
  * - If no tile IDs are available, Stop emits a stop-all payload for tile oscillation.
+ *
+ * Selection-layer metadata:
+ * - selectionLayer: "tiles" tells the GM panel to activate Foundry's native
+ *   Tiles selector when this tab is opened or clicked.
  *
  * Reason for releasing selection:
  * - Foundry refreshes selected Tile state during render ticks.
@@ -208,10 +213,30 @@ function buildParams(panel) {
   };
 }
 
+function buildPayload(root, runtime) {
+  const panel = getTileOscPanel(root);
+
+  const tileIds = selectedTileIds();
+  if (!Array.isArray(tileIds) || tileIds.length === 0) {
+    throw new Error("TileOsc: no tiles selected");
+  }
+
+  const action = shouldUpdate(runtime, tileIds)
+    ? ACTION_UPDATE
+    : ACTION_START;
+
+  return {
+    action,
+    tileIds,
+    ...buildParams(panel)
+  };
+}
+
 export function tileOscTabDef() {
   return {
     id: TAB_ID,
     label: "Tile Osc",
+    selectionLayer: "tiles",
 
     /**
      * Build the socket payload for Apply / Copy-to-Macro.
@@ -221,22 +246,7 @@ export function tileOscTabDef() {
      * @returns {object}
      */
     buildApplyPayload(root, runtime) {
-      const panel = getTileOscPanel(root);
-
-      const tileIds = selectedTileIds();
-      if (!Array.isArray(tileIds) || tileIds.length === 0) {
-        throw new Error("TileOsc: no tiles selected");
-      }
-
-      const action = shouldUpdate(runtime, tileIds)
-        ? ACTION_UPDATE
-        : ACTION_START;
-
-      return {
-        action,
-        tileIds,
-        ...buildParams(panel)
-      };
+      return buildPayload(root, runtime);
     },
 
     wire(root, runtime) {
@@ -277,7 +287,7 @@ export function tileOscTabDef() {
 
       function apply() {
         try {
-          const payload = this.buildApplyPayload(root, runtime);
+          const payload = buildPayload(root, runtime);
 
           rememberTileIds(runtime, payload.tileIds);
 
@@ -303,7 +313,7 @@ export function tileOscTabDef() {
         .querySelector('button[type="button"][data-do="tileOscApply"]')
         ?.addEventListener("click", (event) => {
           event.preventDefault();
-          apply.call(this);
+          apply();
         });
     }
   };

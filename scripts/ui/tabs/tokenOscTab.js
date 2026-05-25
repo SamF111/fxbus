@@ -8,9 +8,14 @@
  * - "Apply" now chooses start vs update automatically.
  *
  * Behaviour:
- * - If any selected token is already oscillating -> emit update
- * - Else -> emit start
- * - Stop always emits stop
+ * - Requires native Token selection mode.
+ * - If any selected token is already oscillating -> emit update.
+ * - Else -> emit start.
+ * - Stop always emits stop.
+ *
+ * Selection-layer metadata:
+ * - selectionLayer: "tokens" tells the GM panel to activate Foundry's native
+ *   Token selector when this tab is opened or clicked.
  *
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
@@ -22,19 +27,78 @@ import { num, selectedTokenIds } from "./shared/panelUtils.js";
 const TAB_ID = "osc";
 
 function shouldUpdate(runtime, tokenIds) {
+  /**
+   * Large comment:
+   * Determine whether Apply should start or update token oscillation.
+   *
+   * The runtime tokenFx store has changed shape during development, so this
+   * deliberately checks both likely forms:
+   * - a Map keyed directly by token id
+   * - an object keyed directly by token id
+   */
   const map = runtime?.tokenFx;
   if (!map) return false;
+
   for (const id of tokenIds) {
     if (map.has?.(id)) return true;
     if (map[id]) return true;
   }
+
   return false;
+}
+
+function getPanel(root) {
+  const panel = root.querySelector(
+    `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
+  );
+
+  if (!panel) throw new Error("TokenOsc: panel not found");
+
+  return panel;
+}
+
+function getOscParams(panel) {
+  return {
+    rollDeg: num(panel.querySelector('input[name="oscRollDeg"]')?.value, 3),
+    bobPx: num(panel.querySelector('input[name="oscBobPx"]')?.value, 2),
+    swayPx: num(panel.querySelector('input[name="oscSwayPx"]')?.value, 1),
+    freqHz: num(panel.querySelector('input[name="oscFreqHz"]')?.value, 0.7),
+    noise: num(panel.querySelector('input[name="oscNoise"]')?.value, 0),
+    randomPhase: Boolean(panel.querySelector('input[name="oscRandomPhase"]')?.checked)
+  };
+}
+
+function getSelectedTokensForOscillation() {
+  const tokenIds = selectedTokenIds();
+
+  if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
+    throw new Error("TokenOsc: no tokens selected");
+  }
+
+  return tokenIds;
+}
+
+function buildPayload(root, runtime) {
+  const panel = getPanel(root);
+  const tokenIds = getSelectedTokensForOscillation();
+  const params = getOscParams(panel);
+
+  const action = shouldUpdate(runtime, tokenIds)
+    ? "fx.tokenOsc.update"
+    : "fx.tokenOsc.start";
+
+  return {
+    action,
+    tokenIds,
+    ...params
+  };
 }
 
 export function tokenOscTabDef() {
   return {
     id: TAB_ID,
     label: "Token Osc",
+    selectionLayer: "tokens",
 
     /**
      * Build the socket payload for "Apply" / Copy-to-Macro.
@@ -44,34 +108,7 @@ export function tokenOscTabDef() {
      * @returns {object}
      */
     buildApplyPayload(root, runtime) {
-      const panel = root.querySelector(
-        `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
-      );
-      if (!panel) throw new Error("TokenOsc: panel not found");
-
-      const tokenIds = selectedTokenIds();
-      if (!Array.isArray(tokenIds) || tokenIds.length === 0) {
-        throw new Error("TokenOsc: no tokens selected");
-      }
-
-      const params = {
-        rollDeg: num(panel.querySelector('input[name="oscRollDeg"]')?.value, 3),
-        bobPx: num(panel.querySelector('input[name="oscBobPx"]')?.value, 2),
-        swayPx: num(panel.querySelector('input[name="oscSwayPx"]')?.value, 1),
-        freqHz: num(panel.querySelector('input[name="oscFreqHz"]')?.value, 0.7),
-        noise: num(panel.querySelector('input[name="oscNoise"]')?.value, 0),
-        randomPhase: Boolean(panel.querySelector('input[name="oscRandomPhase"]')?.checked)
-      };
-
-      const action = shouldUpdate(runtime, tokenIds)
-        ? "fx.tokenOsc.update"
-        : "fx.tokenOsc.start";
-
-      return {
-        action,
-        tokenIds,
-        ...params
-      };
+      return buildPayload(root, runtime);
     },
 
     wire(root, runtime) {
@@ -82,16 +119,21 @@ export function tokenOscTabDef() {
 
       function stop() {
         const tokenIds = selectedTokenIds();
+
         if (tokenIds.length === 0) {
           ui.notifications.warn("Select one or more tokens for Token Oscillation.");
           return;
         }
-        runtime.emit({ action: "fx.tokenOsc.stop", tokenIds });
+
+        runtime.emit({
+          action: "fx.tokenOsc.stop",
+          tokenIds
+        });
       }
 
       function apply() {
         try {
-          runtime.emit(this.buildApplyPayload(root, runtime));
+          runtime.emit(buildPayload(root, runtime));
         } catch (err) {
           ui.notifications.warn("Select one or more tokens for Token Oscillation.");
           console.warn("[FX Bus] Token Osc apply failed", err);
@@ -109,7 +151,7 @@ export function tokenOscTabDef() {
         .querySelector('button[type="button"][data-do="oscApply"]')
         ?.addEventListener("click", (event) => {
           event.preventDefault();
-          apply.call(this);
+          apply();
         });
     }
   };

@@ -17,13 +17,13 @@
     placeholder="boss-pylon-lasers"
   />
   <p class="fxbus-muted">
-    Use a stable ID for macro toggles. The same ID toggles the same configured laser on and off.
+    Use a stable ID for macro toggles.
   </p>
 </div>
 
 <div class="fxbus-grid-2">
   <div class="form-group">
-    <label>Colour</label>
+    <label>Primary colour</label>
     <div class="fxbus-inline">
       <input type="color" name="laserColourPicker" value="#ff2222"/>
       <input type="text" name="laserColour" value="#ff2222" placeholder="#rrggbb"/>
@@ -36,7 +36,28 @@
       <option value="laser" selected>Laser</option>
       <option value="beam">Beam</option>
       <option value="arc">Arc</option>
+      <option value="rope">Rope</option>
+      <option value="chain">Chain</option>
+      <option value="cable">Cable</option>
     </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Secondary colour</label>
+    <div class="fxbus-inline">
+      <input type="color" name="laserSecondaryColourPicker" value="#ffffff"/>
+      <input type="text" name="laserSecondaryColour" value="#ffffff" placeholder="#rrggbb"/>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Outline colour</label>
+    <div class="fxbus-inline">
+      <input type="color" name="laserOutlineColourPicker" value="#000000"/>
+      <input type="text" name="laserOutlineColour" value="#000000" placeholder="#rrggbb"/>
+    </div>
   </div>
 </div>
 
@@ -68,7 +89,7 @@
       value="4"
       step="0.5"
       min="1"
-      max="40"
+      max="80"
     />
   </div>
 
@@ -124,63 +145,201 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-grid-2">
-  <div class="form-group">
-    <label>Motion</label>
-    <select name="laserFlowDirection">
-      <option value="none" selected>None</option>
-      <option value="forward">Flow - source to target</option>
-      <option value="reverse">Reverse - target to source</option>
-      <option value="pingpong">Ping-pong</option>
-    </select>
-  </div>
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Advanced procedural settings
+  </summary>
 
-  <div class="form-group">
-    <label>Motion colour</label>
-    <div class="fxbus-inline">
-      <input type="color" name="laserFlowColourPicker" value="#ffffff"/>
-      <input type="text" name="laserFlowColour" value="#ffffff" placeholder="#rrggbb"/>
+  <p class="fxbus-muted">
+    Used mainly by rope, chain, and cable styles. No image assets or tiles are created.
+  </p>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Sag (px)</label>
+      <input
+        type="number"
+        name="laserSagPx"
+        value="0"
+        step="1"
+        min="-500"
+        max="500"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Sway (px)</label>
+      <input
+        type="number"
+        name="laserSwayPx"
+        value="0"
+        step="0.5"
+        min="0"
+        max="200"
+      />
     </div>
   </div>
-</div>
 
-<div class="fxbus-grid-2">
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Rope twist</label>
+      <input
+        type="number"
+        name="laserTwistFreq"
+        value="0.45"
+        step="0.05"
+        min="0"
+        max="10"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Twist speed</label>
+      <input
+        type="number"
+        name="laserTwistSpeed"
+        value="1.2"
+        step="0.1"
+        min="-20"
+        max="20"
+      />
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Chain spacing</label>
+      <input
+        type="number"
+        name="laserLinkSpacingPx"
+        value="14"
+        step="1"
+        min="4"
+        max="120"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Chain size</label>
+      <input
+        type="number"
+        name="laserLinkLengthPx"
+        value="16"
+        step="1"
+        min="4"
+        max="160"
+      />
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Chain width</label>
+      <input
+        type="number"
+        name="laserLinkWidthPx"
+        value="7"
+        step="1"
+        min="2"
+        max="120"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Segments</label>
+      <input
+        type="number"
+        name="laserSegments"
+        value="24"
+        step="1"
+        min="4"
+        max="128"
+      />
+    </div>
+  </div>
+
   <div class="form-group">
-    <label>Motion speed</label>
+    <label>Sway frequency (Hz)</label>
     <input
       type="number"
-      name="laserFlowSpeed"
-      value="1.5"
+      name="laserSwayHz"
+      value="0.8"
       step="0.1"
       min="0"
       max="20"
     />
   </div>
+</details>
+
+<hr class="fxbus-divider"/>
+
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Motion settings
+  </summary>
+
+  <p class="fxbus-muted">
+    Optional moving packets along the laser, beam, rope, chain, or cable path.
+  </p>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Motion</label>
+      <select name="laserFlowDirection">
+        <option value="none" selected>None</option>
+        <option value="forward">Flow - source to target</option>
+        <option value="reverse">Reverse - target to source</option>
+        <option value="pingpong">Ping-pong</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label>Motion colour</label>
+      <div class="fxbus-inline">
+        <input type="color" name="laserFlowColourPicker" value="#ffffff"/>
+        <input type="text" name="laserFlowColour" value="#ffffff" placeholder="#rrggbb"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Motion speed</label>
+      <input
+        type="number"
+        name="laserFlowSpeed"
+        value="1.5"
+        step="0.1"
+        min="0"
+        max="20"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Motion count</label>
+      <input
+        type="number"
+        name="laserFlowCount"
+        value="3"
+        step="1"
+        min="1"
+        max="40"
+      />
+    </div>
+  </div>
 
   <div class="form-group">
-    <label>Motion count</label>
+    <label>Motion size (px, 0 = auto)</label>
     <input
       type="number"
-      name="laserFlowCount"
-      value="3"
-      step="1"
-      min="1"
-      max="20"
+      name="laserFlowSize"
+      value="0"
+      step="0.5"
+      min="0"
+      max="80"
     />
   </div>
-</div>
-
-<div class="form-group">
-  <label>Motion size (px, 0 = auto)</label>
-  <input
-    type="number"
-    name="laserFlowSize"
-    value="0"
-    step="0.5"
-    min="0"
-    max="60"
-  />
-</div>
+</details>
 
 <hr class="fxbus-divider"/>
 

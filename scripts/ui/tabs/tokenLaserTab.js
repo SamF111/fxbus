@@ -1,19 +1,29 @@
 // D:\FoundryVTT\Data\modules\fxbus\scripts\ui\tabs\tokenLaserTab.js
 
 /**
- * FX Bus - Token Laser Tab (Foundry v13+ ApplicationV2)
+ * FX Bus - Token Tether Tab (Foundry v13+ ApplicationV2)
  *
  * Behaviour:
  * - Uses native Foundry token selection.
- * - First selected token becomes the laser source.
- * - All remaining selected tokens become laser targets.
- * - Link mode controls whether lasers form a source fan or a full token network.
- * - Layer mode controls whether laser graphics render above tokens, below tokens, or split.
- * - Motion mode controls whether packets move along each laser path.
- * - Apply starts or updates a laser using the configured laserId.
+ * - First selected token becomes the tether source.
+ * - All remaining selected tokens become tether targets.
+ * - Link mode controls whether tethers form a source fan or a full token network.
+ * - Layer mode controls whether graphics render above tokens, below tokens, or split.
+ * - Motion mode controls whether packets move along each path.
+ * - Apply starts or updates a tether using the configured laserId.
  * - Toggle uses the configured laserId as an authoritative GM-side toggle.
  * - Stop stops the configured laserId.
- * - Stop All removes all token lasers.
+ * - Stop All removes all token tethers.
+ *
+ * Selection-layer metadata:
+ * - selectionLayer: "tokens" tells the GM panel to activate Foundry's native
+ *   Token selector when this tab is opened or clicked.
+ *
+ * v13/v14 stability:
+ * - No MutationObserver.
+ * - No live token Hooks from this tab.
+ * - No continuous canvas.tokens.controlled reads for tab text.
+ * - Token IDs are read only when Apply, Toggle, or Copy to Macro builds a payload.
  *
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) for the generic macro path.
@@ -38,7 +48,7 @@ function getPanel(root) {
     `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
   );
 
-  if (!panel) throw new Error("TokenLaser: panel not found");
+  if (!panel) throw new Error("TokenTether: panel not found");
 
   return panel;
 }
@@ -48,14 +58,21 @@ function getLaserId(panel) {
     panel.querySelector('input[name="laserId"]')?.value ?? ""
   ).trim();
 
-  return explicit.length > 0 ? explicit : "token-laser";
+  return explicit.length > 0 ? explicit : "token-tether";
 }
 
 function getSelectedLaserTokens() {
+  /**
+   * Large comment:
+   * Read selected token IDs only when a user action actually needs a payload.
+   *
+   * Do not read selected tokens during passive tab rendering or summary updates.
+   * That path has been implicated in crashes on token-related UI interaction.
+   */
   const tokenIds = selectedTokenIds();
 
   if (!Array.isArray(tokenIds) || tokenIds.length < 2) {
-    throw new Error("TokenLaser: select at least two tokens");
+    throw new Error("TokenTether: select at least two tokens");
   }
 
   return {
@@ -70,26 +87,55 @@ function getLaserParams(panel) {
 
   return {
     laserId: getLaserId(panel),
+
     colour: normaliseHex(
       panel.querySelector('input[name="laserColour"]')?.value,
       "#ff2222"
     ),
+
+    secondaryColour: normaliseHex(
+      panel.querySelector('input[name="laserSecondaryColour"]')?.value,
+      "#ffffff"
+    ),
+
+    outlineColour: normaliseHex(
+      panel.querySelector('input[name="laserOutlineColour"]')?.value,
+      "#000000"
+    ),
+
     width: num(panel.querySelector('input[name="laserWidth"]')?.value, 4),
     alpha: num(panel.querySelector('input[name="laserAlpha"]')?.value, 0.95),
     glow: Boolean(panel.querySelector('input[name="laserGlow"]')?.checked),
     pulse: Boolean(panel.querySelector('input[name="laserPulse"]')?.checked),
     pulseSpeed: num(panel.querySelector('input[name="laserPulseSpeed"]')?.value, 2),
+
     style: String(panel.querySelector('select[name="laserStyle"]')?.value ?? "laser"),
     linkMode: String(panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"),
     layerMode: String(panel.querySelector('select[name="laserLayerMode"]')?.value ?? "split"),
+
+    sagPx: num(panel.querySelector('input[name="laserSagPx"]')?.value, 0),
+    segments: num(panel.querySelector('input[name="laserSegments"]')?.value, 24),
+
+    twistFreq: num(panel.querySelector('input[name="laserTwistFreq"]')?.value, 0.45),
+    twistSpeed: num(panel.querySelector('input[name="laserTwistSpeed"]')?.value, 1.2),
+
+    swayPx: num(panel.querySelector('input[name="laserSwayPx"]')?.value, 0),
+    swayHz: num(panel.querySelector('input[name="laserSwayHz"]')?.value, 0.8),
+
+    linkSpacingPx: num(panel.querySelector('input[name="laserLinkSpacingPx"]')?.value, 14),
+    linkLengthPx: num(panel.querySelector('input[name="laserLinkLengthPx"]')?.value, 16),
+    linkWidthPx: num(panel.querySelector('input[name="laserLinkWidthPx"]')?.value, 7),
+
     flowDirection: String(panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"),
     flowSpeed: num(panel.querySelector('input[name="laserFlowSpeed"]')?.value, 1.5),
     flowCount: num(panel.querySelector('input[name="laserFlowCount"]')?.value, 3),
     flowSize: num(panel.querySelector('input[name="laserFlowSize"]')?.value, 0),
+
     flowColour: normaliseHex(
       panel.querySelector('input[name="laserFlowColour"]')?.value,
       "#ffffff"
     ),
+
     durationMs: until?.checked ? 0 : num(duration?.value, 1500)
   };
 }
@@ -120,7 +166,7 @@ function buildAuthoritativeTogglePayload(root, runtime) {
    * Resolve Toggle on the GM client into an explicit start or stop payload.
    *
    * Do not emit fx.tokenLaser.toggle here. Raw toggle is unsafe across clients
-   * with different local state, especially when a player joins after the laser
+   * with different local state, especially when a player joins after the tether
    * was started.
    */
   const panel = getPanel(root);
@@ -148,11 +194,11 @@ function jsStringLiteral(value) {
 function buildMacroHeader(macroName, meta, laserId) {
   const lines = [
     "/**",
-    ` * ${jsStringLiteral(macroName || "FX Bus - Token Laser")}`,
+    ` * ${jsStringLiteral(macroName || "FX Bus - Token Tether")}`,
     " *",
     " * Generated by FX Bus GM Control Panel.",
     " * Action: fx.tokenLaser.authoritativeToggle",
-    ` * Laser ID: ${jsStringLiteral(laserId)}`,
+    ` * Tether ID: ${jsStringLiteral(laserId)}`,
     meta?.generatedAt ? ` * Generated: ${jsStringLiteral(meta.generatedAt)}` : null,
     meta?.generatedBy ? ` * User: ${jsStringLiteral(meta.generatedBy)}` : null,
     meta?.fxbusVersion ? ` * FX Bus: v${jsStringLiteral(meta.fxbusVersion)}` : null,
@@ -170,16 +216,9 @@ function buildMacroHeader(macroName, meta, laserId) {
 function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
   /**
    * Large comment:
-   * Build a Token Laser macro that behaves as an authoritative toggle.
-   *
-   * Raw fx.tokenLaser.toggle is unsafe when clients are desynchronised:
-   * - GM may have the laser active
-   * - late-joining player may not have the laser active
-   * - raw toggle then stops on GM but starts on the player
-   *
-   * This macro instead checks GM-local state, then emits explicit start or stop.
+   * Build a Token Tether macro that behaves as an authoritative toggle.
    */
-  const laserId = String(startPayload?.laserId ?? "token-laser").trim() || "token-laser";
+  const laserId = String(startPayload?.laserId ?? "token-tether").trim() || "token-tether";
 
   const safeStartPayload = {
     ...startPayload,
@@ -220,96 +259,33 @@ function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
 }
 
 function updateSelectedTokenSummary(panel) {
+  /**
+   * Large comment:
+   * Keep the summary static.
+   *
+   * Earlier versions queried canvas.tokens.controlled and wrote token names into
+   * this field from hooks, select changes, and MutationObserver callbacks. That
+   * path is suspected of causing crashes in v13/v14.
+   */
   const el = panel.querySelector("[data-laser-selection-summary]");
   if (!el) return;
 
-  const controlled = canvas?.tokens?.controlled ?? [];
-
-  if (controlled.length === 0) {
-    el.textContent = "Selected tokens: none";
-    return;
-  }
-
-  if (controlled.length === 1) {
-    const name = controlled[0]?.name ?? controlled[0]?.document?.name ?? controlled[0]?.id;
-    el.textContent = `Selected tokens: 1 - source only (${name})`;
-    return;
-  }
-
-  const source = controlled[0];
-  const targets = controlled.slice(1);
-
-  const sourceName = source?.name ?? source?.document?.name ?? source?.id;
-  const targetNames = targets
-    .map((token) => token?.name ?? token?.document?.name ?? token?.id)
-    .join(", ");
-
-  const linkMode = String(
-    panel.querySelector('select[name="laserLinkMode"]')?.value ?? "network"
-  );
-
-  const layerMode = String(
-    panel.querySelector('select[name="laserLayerMode"]')?.value ?? "split"
-  );
-
-  const flowDirection = String(
-    panel.querySelector('select[name="laserFlowDirection"]')?.value ?? "none"
-  );
-
-  const layerText = ` | Layer: ${layerMode}`;
-
-  const flowText = flowDirection === "none"
-    ? ""
-    : ` | Motion: ${flowDirection}`;
-
-  if (linkMode === "network") {
-    const n = controlled.length;
-    const pairCount = (n * (n - 1)) / 2;
-    el.textContent = `Network: ${n} tokens | ${pairCount} links${layerText}${flowText}`;
-    return;
-  }
-
-  el.textContent = `Source: ${sourceName} | Targets: ${targetNames}${layerText}${flowText}`;
+  el.textContent = "Select at least two tokens with Foundry's native Token tool, then use Apply or Toggle.";
 }
 
 function wireSelectionSummary(panel) {
+  /**
+   * Large comment:
+   * Intentionally passive.
+   *
+   * No Hooks.
+   * No MutationObserver.
+   * No live token reads.
+   */
   updateSelectedTokenSummary(panel);
 
-  const refresh = () => updateSelectedTokenSummary(panel);
-
-  Hooks.on("controlToken", refresh);
-  Hooks.on("updateToken", refresh);
-  Hooks.on("deleteToken", refresh);
-
-  panel
-    .querySelector('select[name="laserLinkMode"]')
-    ?.addEventListener("change", refresh);
-
-  panel
-    .querySelector('select[name="laserLayerMode"]')
-    ?.addEventListener("change", refresh);
-
-  panel
-    .querySelector('select[name="laserFlowDirection"]')
-    ?.addEventListener("change", refresh);
-
-  const observer = new MutationObserver(refresh);
-  observer.observe(panel, { childList: true, subtree: true });
-
   panel.__fxbusLaserCleanup = () => {
-    try {
-      Hooks.off("controlToken", refresh);
-      Hooks.off("updateToken", refresh);
-      Hooks.off("deleteToken", refresh);
-    } catch {
-      // ignore
-    }
-
-    try {
-      observer.disconnect();
-    } catch {
-      // ignore
-    }
+    // no hooks to remove
   };
 }
 
@@ -348,42 +324,68 @@ function syncFlowControls(panel) {
   sync();
 }
 
+function syncProceduralControls(panel) {
+  /**
+   * Large comment:
+   * Disable irrelevant advanced procedural controls based on the selected style.
+   *
+   * This does not read tokens and does not emit effects.
+   */
+  const style = panel.querySelector('select[name="laserStyle"]');
+
+  const sag = panel.querySelector('input[name="laserSagPx"]');
+  const segments = panel.querySelector('input[name="laserSegments"]');
+  const sway = panel.querySelector('input[name="laserSwayPx"]');
+  const swayHz = panel.querySelector('input[name="laserSwayHz"]');
+
+  const twistFreq = panel.querySelector('input[name="laserTwistFreq"]');
+  const twistSpeed = panel.querySelector('input[name="laserTwistSpeed"]');
+
+  const chainSpacing = panel.querySelector('input[name="laserLinkSpacingPx"]');
+  const chainLength = panel.querySelector('input[name="laserLinkLengthPx"]');
+  const chainWidth = panel.querySelector('input[name="laserLinkWidthPx"]');
+
+  if (!style) return;
+
+  const sync = () => {
+    const value = style.value;
+    const isProceduralCurve = ["rope", "chain", "cable"].includes(value);
+    const isRope = value === "rope";
+    const isChain = value === "chain";
+
+    setDisabled(sag, !isProceduralCurve);
+    setDisabled(segments, !isProceduralCurve);
+    setDisabled(sway, !isProceduralCurve);
+    setDisabled(swayHz, !isProceduralCurve);
+
+    setDisabled(twistFreq, !isRope);
+    setDisabled(twistSpeed, true);
+
+    setDisabled(chainSpacing, !isChain);
+    setDisabled(chainLength, !isChain);
+    setDisabled(chainWidth, !isChain);
+  };
+
+  style.addEventListener("change", sync);
+  sync();
+}
+
 export function tokenLaserTabDef() {
   return {
     id: TAB_ID,
-    label: "Token Laser",
+    label: "Token Tether",
+    selectionLayer: "tokens",
 
-    /**
-     * Build the generic socket payload for Copy-to-Macro fallback.
-     *
-     * This returns explicit start, not raw toggle. The real Copy to Macro path
-     * should use buildMacroSource, but keeping this safe avoids future accidental
-     * local-state inversion.
-     *
-     * @param {HTMLElement} root
-     * @param {object} runtime
-     * @returns {object}
-     */
     buildApplyPayload(root, _runtime) {
       return buildPayload(root, "fx.tokenLaser.start");
     },
 
-    /**
-     * Build a custom authoritative toggle macro.
-     *
-     * @param {HTMLElement} root
-     * @param {object} runtime
-     * @param {object} options
-     * @param {string} options.macroName
-     * @param {object} options.meta
-     * @returns {string}
-     */
     buildMacroSource(root, _runtime, options = {}) {
       const startPayload = buildPayload(root, "fx.tokenLaser.start");
 
       return buildAuthoritativeToggleMacroSource(
         startPayload,
-        options.macroName ?? "FX Bus - Token Laser",
+        options.macroName ?? "FX Bus - Token Tether",
         options.meta ?? {}
       );
     },
@@ -391,9 +393,9 @@ export function tokenLaserTabDef() {
     macroName(root) {
       try {
         const panel = getPanel(root);
-        return `FX Bus - Token Laser - ${getLaserId(panel)}`;
+        return `FX Bus - Token Tether - ${getLaserId(panel)}`;
       } catch {
-        return "FX Bus - Token Laser";
+        return "FX Bus - Token Tether";
       }
     },
 
@@ -410,17 +412,21 @@ export function tokenLaserTabDef() {
       }
 
       syncColourPair(panel, "laserColourPicker", "laserColour", "#ff2222");
+      syncColourPair(panel, "laserSecondaryColourPicker", "laserSecondaryColour", "#ffffff");
+      syncColourPair(panel, "laserOutlineColourPicker", "laserOutlineColour", "#000000");
       syncColourPair(panel, "laserFlowColourPicker", "laserFlowColour", "#ffffff");
+
       syncDurationControls(panel);
       syncFlowControls(panel);
+      syncProceduralControls(panel);
       wireSelectionSummary(panel);
 
       function apply() {
         try {
           runtime.emit(buildPayload(root, "fx.tokenLaser.update"));
         } catch (err) {
-          ui.notifications.warn("Select at least two tokens for Token Laser.");
-          console.warn("[FX Bus] Token Laser apply failed", err);
+          ui.notifications.warn("Select at least two tokens for Token Tether.");
+          console.warn("[FX Bus] Token Tether apply failed", err);
         }
       }
 
@@ -428,8 +434,8 @@ export function tokenLaserTabDef() {
         try {
           runtime.emit(buildAuthoritativeTogglePayload(root, runtime));
         } catch (err) {
-          ui.notifications.warn("Select at least two tokens for Token Laser.");
-          console.warn("[FX Bus] Token Laser toggle failed", err);
+          ui.notifications.warn("Select at least two tokens for Token Tether.");
+          console.warn("[FX Bus] Token Tether toggle failed", err);
         }
       }
 
@@ -437,8 +443,8 @@ export function tokenLaserTabDef() {
         try {
           runtime.emit(buildStopPayload(root));
         } catch (err) {
-          ui.notifications.warn("Token Laser stop failed.");
-          console.warn("[FX Bus] Token Laser stop failed", err);
+          ui.notifications.warn("Token Tether stop failed.");
+          console.warn("[FX Bus] Token Tether stop failed", err);
         }
       }
 
@@ -446,33 +452,19 @@ export function tokenLaserTabDef() {
         runtime.emit({ action: "fx.tokenLaser.stopAll" });
       }
 
-      panel
-        .querySelector('button[type="button"][data-do="laserApply"]')
-        ?.addEventListener("click", (event) => {
+      for (const button of Array.from(panel.querySelectorAll(".fxbus-do[data-do]"))) {
+        button.addEventListener("click", (event) => {
           event.preventDefault();
-          apply();
-        });
+          event.stopPropagation();
 
-      panel
-        .querySelector('button[type="button"][data-do="laserToggle"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          toggle();
-        });
+          const action = button.dataset.do;
 
-      panel
-        .querySelector('button[type="button"][data-do="laserStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
+          if (action === "laserApply") apply();
+          if (action === "laserToggle") toggle();
+          if (action === "laserStop") stop();
+          if (action === "laserStopAll") stopAll();
         });
-
-      panel
-        .querySelector('button[type="button"][data-do="laserStopAll"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stopAll();
-        });
+      }
     }
   };
 }
