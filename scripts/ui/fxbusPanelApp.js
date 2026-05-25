@@ -16,6 +16,7 @@
  * - Each tab may declare selectionLayer: "tokens", "tiles", or null.
  * - Token Oscillation should declare "tokens".
  * - Token Tether should declare "tokens".
+ * - Token Recoil should declare "tokens".
  * - Tile Oscillation should declare "tiles".
  * - Screen FX tabs omit selectionLayer or set it to null.
  * - The panel activates the declared native Foundry selection layer when opened
@@ -42,8 +43,10 @@
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
 import { tokenLaserTabDef } from "./tabs/tokenLaserTab.js";
+import { tokenRecoilTabDef } from "./tabs/tokenRecoilTab.js";
 import { tileOscTabDef } from "./tabs/tileOscTab.js";
 import { screenShakeTabDef } from "./tabs/screenShakeTab.js";
+import { screenRotateTabDef } from "./tabs/screenRotateTab.js";
 import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
 import { screenVignetteTabDef } from "./tabs/screenVignetteTab.js";
 import { screenChromAbTabDef } from "./tabs/screenChromAbTab.js";
@@ -68,8 +71,10 @@ const { loadTemplates, getTemplate } = foundry.applications.handlebars;
 const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenLaserTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/screenRotateTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenVignetteTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenChromAbTab.hbs`,
@@ -130,8 +135,10 @@ function buildTabs() {
   return [
     tokenOscTabDef(),
     tokenLaserTabDef(),
+    tokenRecoilTabDef(),
     tileOscTabDef(),
     screenShakeTabDef(),
+    screenRotateTabDef(),
     screenPulseTabDef(),
     screenVignetteTabDef(),
     screenChromAbTabDef(),

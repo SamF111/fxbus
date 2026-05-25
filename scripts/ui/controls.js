@@ -18,7 +18,7 @@
  * Selection model:
  * - "Select Tokens" explicitly activates Foundry's native Token select tool.
  * - "Select Tiles" explicitly activates Foundry's native Tiles select tool.
- * - Token Oscillation, Token Tether, and Tile Oscillation only open their tabs.
+ * - Token Oscillation, Token Tether, Token Recoil, and Tile Oscillation only open their tabs.
  * - Screen FX leave the current selection mode alone.
  *
  * Token Tether:
@@ -68,6 +68,12 @@ const TOOL_DEFS = [
     tab: "laser"
   },
   {
+    name: "fxbus-recoil",
+    title: "Token Recoil",
+    icon: "fas fa-burst",
+    tab: "recoil"
+  },
+  {
     name: "fxbus-tile-osc",
     title: "Tile Oscillation",
     icon: "fas fa-tree",
@@ -78,6 +84,12 @@ const TOOL_DEFS = [
     title: "Screen Shake",
     icon: "fas fa-wave-square",
     tab: "shake"
+  },
+  {
+    name: "fxbus-rotate",
+    title: "Screen Rotate",
+    icon: "fas fa-sync-alt",
+    tab: "rotate"
   },
   {
     name: "fxbus-pulse",

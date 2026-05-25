@@ -137,6 +137,14 @@
   </section>
 
   <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'recoil')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="recoil"
+  >
+    {{> "modules/fxbus/templates/tabs/tokenRecoilTab.hbs"}}
+  </section>
+
+  <section
     class="tab fxbus-panel-section {{#if (eq activeTab 'tileOsc')}}active{{/if}}"
     data-group="fxbus"
     data-tab="tileOsc"
@@ -150,6 +158,14 @@
     data-tab="shake"
   >
     {{> "modules/fxbus/templates/tabs/screenShakeTab.hbs"}}
+  </section>
+
+  <section
+    class="tab fxbus-panel-section {{#if (eq activeTab 'rotate')}}active{{/if}}"
+    data-group="fxbus"
+    data-tab="rotate"
+  >
+    {{> "modules/fxbus/templates/tabs/screenRotateTab.hbs"}}
   </section>
 
   <section

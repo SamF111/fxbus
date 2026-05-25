@@ -1,0 +1,188 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tokenRecoilTab.hbs --}}
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Origin X</label>
+    <input
+      type="number"
+      name="recoilOriginX"
+      value="0"
+      step="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Origin Y</label>
+    <input
+      type="number"
+      name="recoilOriginY"
+      value="0"
+      step="1"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="recoilUseSelectedOrigin" />
+    Use first selected token as origin
+  </label>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="recoilExcludeSelected" checked />
+    Exclude selected token(s)
+  </label>
+</div>
+
+<div class="fxbus-row">
+  <button type="button" data-action="recoilPickOriginOnCanvas">
+    Pick Origin on Canvas
+  </button>
+
+  <button type="button" data-action="recoilSetOriginFromSelected">
+    Set Origin from Selected
+  </button>
+</div>
+
+<hr class="fxbus-divider" />
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Affect</label>
+    <select name="recoilAffect">
+      <option value="tokensInRadius" selected>Tokens in Radius</option>
+      <option value="selectedInRadius">Selected in Radius</option>
+      <option value="selectedOnly">Selected Only</option>
+      <option value="listedOnly">Listed Only / Macro Targets</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Mode</label>
+    <select name="recoilMode">
+      <option value="radialOut" selected>Radial Out</option>
+      <option value="radialIn">Radial In</option>
+      <option value="directional">Directional</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Radius (px)</label>
+    <input
+      type="number"
+      name="recoilRadiusPx"
+      value="500"
+      step="10"
+      min="1"
+      max="10000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Distance (px)</label>
+    <input
+      type="number"
+      name="recoilDistancePx"
+      value="40"
+      step="1"
+      min="0"
+      max="300"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Duration (ms)</label>
+    <input
+      type="number"
+      name="recoilDurationMs"
+      value="450"
+      step="25"
+      min="50"
+      max="10000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Falloff</label>
+    <select name="recoilFalloff">
+      <option value="linear" selected>Linear</option>
+      <option value="smooth">Smooth</option>
+      <option value="none">None</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Direction Angle (deg)</label>
+    <input
+      type="number"
+      name="recoilAngleDeg"
+      value="0"
+      step="1"
+      min="-360"
+      max="360"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Wave Delay (ms)</label>
+    <input
+      type="number"
+      name="recoilMaxDelayMs"
+      value="0"
+      step="10"
+      min="0"
+      max="500"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Rotation Kick (deg)</label>
+  <input
+    type="number"
+    name="recoilRotationDeg"
+    value="0"
+    step="0.5"
+    min="-45"
+    max="45"
+  />
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="recoilIncludeHidden" />
+    Include hidden tokens
+  </label>
+</div>
+
+<hr class="fxbus-divider" />
+
+<div class="fxbus-row">
+  <button type="button" data-action="recoilStart">Start</button>
+  <button type="button" data-action="recoilStop" class="fxbus-smallbtn">Stop</button>
+  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+</div>
+
+<p class="fxbus-muted">
+  Recoil is visual-only. It offsets token artwork by pivot and restores it after the burst.
+</p>
+
+<p class="fxbus-muted">
+  Use Pick Origin on Canvas for explosions, fireballs, grenades, room-centre blasts, and other point-origin effects.
+</p>
+
+<p class="fxbus-muted">
+  Use first selected token as origin for caster-origin effects such as shockwaves, stomps, pulses, and thunderous bursts.
+</p>
+
+<p class="fxbus-muted">
+  For blast-source tokens, keep “Exclude selected token(s)” enabled so the origin token does not recoil from its own centre.
+</p>

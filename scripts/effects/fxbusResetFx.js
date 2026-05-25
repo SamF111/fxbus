@@ -27,6 +27,7 @@ const ACTION_RESET = "fx.bus.reset";
 // Token stop actions
 const TOKEN_OSC_STOP = "fx.tokenOsc.stop";
 const TOKEN_OSC_STOP_LEGACY = "tokenOscStop";
+const TOKEN_RECOIL_STOP = "fx.tokenRecoil.stop";
 const TOKEN_LASER_STOP_ALL = "fx.tokenLaser.stopAll";
 const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
 
@@ -36,6 +37,7 @@ const TILE_OSC_STOP_LEGACY = "tileOscStop";
 
 // Screen stop actions
 const SCREEN_SHAKE_STOP = "fx.screenShake.stop";
+const SCREEN_ROTATE_STOP = "fx.screenRotate.stop";
 const SCREEN_PULSE_STOP = "fx.screenPulse.stop";
 const SCREEN_VIGNETTE_STOP = "fx.screenVignette.stop";
 const CHROM_AB_STOP = "fx.chromAb.stop";
@@ -197,7 +199,7 @@ function onReset(runtime) {
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
    * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
    * 3. Stop tile effects using explicit tileIds so tile transforms restore.
-   * 4. Stop screen effects so stage offsets, filters, and overlays restore.
+   * 4. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
    * 5. Remove any residual tickers.
    * 6. Clear runtime maps as a final backstop.
    */
@@ -215,6 +217,17 @@ function onReset(runtime) {
         tokenIds
       });
     }
+
+    if (hasHandler(runtime, TOKEN_RECOIL_STOP)) {
+      safeCallHandler(runtime, TOKEN_RECOIL_STOP, {
+        action: TOKEN_RECOIL_STOP,
+        tokenIds
+      });
+    }
+  } else {
+    stopIfPresent(runtime, TOKEN_RECOIL_STOP, {
+      action: TOKEN_RECOIL_STOP
+    });
   }
 
   stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
@@ -242,6 +255,7 @@ function onReset(runtime) {
   }
 
   stopIfPresent(runtime, SCREEN_SHAKE_STOP);
+  stopIfPresent(runtime, SCREEN_ROTATE_STOP);
   stopIfPresent(runtime, SCREEN_PULSE_STOP);
   stopIfPresent(runtime, SCREEN_VIGNETTE_STOP);
   stopIfPresent(runtime, CHROM_AB_STOP);
