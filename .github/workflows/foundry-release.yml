@@ -4,14 +4,30 @@ on:
   release:
     types: [published]
 
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish to Foundry"
+        required: true
+        default: "v0.6.1"
+
 jobs:
   publish:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Resolve release tag
+        id: release
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish package to Foundry website
         uses: cs96and/FoundryVTT-release-package@v1.0.3
         with:
           package-token: ${{ secrets.FOUNDRY_PACKAGE_TOKEN }}
-          manifest-url: https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/module.json
-          notes-url: https://github.com/${{ github.repository }}/releases/tag/${{ github.event.release.tag_name }}
+          manifest-url: https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.tag }}/module.json
+          notes-url: https://github.com/${{ github.repository }}/releases/tag/${{ steps.release.outputs.tag }}

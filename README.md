@@ -4,7 +4,7 @@
 ![Latest Release](https://img.shields.io/github/v/release/SamF111/fxbus?label=release)
 ![Latest Downloads](https://img.shields.io/github/downloads/SamF111/fxbus/latest/fxbus.zip?label=latest%20downloads)
 
-**FX Bus** is a GM-broadcast cinematic FX framework for **Foundry Virtual Tabletop v14+**.
+**FX Bus** is a GM-broadcast cinematic FX framework for **Foundry Virtual Tabletop v13+**.
 
 It provides deterministic, client-side, non-persistent visual effects for live play. Effects are shown to connected clients without mutating documents, actors, tokens, scenes, or world state.
 
@@ -13,6 +13,17 @@ FX Bus is built for cinematic feedback, vehicle motion, alerts, screen effects, 
 Effects can be triggered from the GM control panel or copied out as macros. Panel actions and generated macros use the same payloads, so behaviour stays consistent whether effects are fired manually, chained into larger automation, combined with other modules, or reused in custom workflows.
 
 ---
+### New - Screen Roll!
+Rotates the rendered canvas view for all connected players, making the scene feel like reality has tilted, slipped, or gone very, very wrong.  
+Use it for psychic attacks, rift ruptures, teleportation failures, black holes, gravity shifts, vehicle crashes, boss phase changes, dream logic, planar instability, or moments where the room itself should feel hostile.
+
+Supports temporary wobble effects that return to normal, hard screen spins, snap rotation, and momentum-style roll effects that settle at a new angle.  
+Designed to remain visual-only, client-side, and non-disruptive during play.
+
+Screen Roll does not move tokens, tiles, walls, lights, or scene data. It only affects the rendered canvas view on each client, and can be reset through FX Bus like the other screen effects.
+
+
+https://github.com/user-attachments/assets/2205d30a-74d5-43d5-8965-797fbf422b64
 
 
 ---
