@@ -12,9 +12,11 @@ The FX Bus control panel will continue to improve as the main way to configure, 
 
 Planned areas include:
 
-- Clearer layout and grouping of effects
+- Improved responsive layout for 1080p displays, smaller screens, and Foundry windows that are not full-screen
+- Clearer grouping of effect controls
+- More compact controls where space is limited
+- More consistent control patterns across effect types
 - Better presets for common use cases
-- More consistent controls across effect types
 - Improved copy-to-macro workflows
 - Better visibility of what an effect will do before it is triggered
 
@@ -25,7 +27,7 @@ FX Bus is intended to work well with reusable macros and larger automation workf
 Planned examples include:
 
 - Basic one-click effect macros
-- Spell-style effect examples
+- Spell-style visual effect examples
 - Environmental scene effect examples
 - Vehicle, impact, alarm, and cinematic transition examples
 - Integration examples for common Foundry automation workflows
@@ -39,7 +41,7 @@ A future goal is to add automated checks before publishing releases.
 Planned checks may include:
 
 - `module.json` validation
-- Manifest/download URL checks
+- Manifest and download URL checks
 - Required file presence checks
 - JavaScript syntax checks
 - Release package structure checks
