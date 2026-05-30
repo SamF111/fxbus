@@ -64,6 +64,20 @@ These will remain consistent with the core FX Bus design:
 
 Some experimental effects may remain private until they are stable enough to show publicly.
 
+## Trusted player macro support
+
+FX Bus is primarily GM-controlled, but some tables may want selected players to trigger visual effects through macros.
+
+A planned improvement is to replace overly defensive GM-only macro guards with a more flexible trust check. The intended behaviour is:
+
+GM users can trigger FX Bus effects
+trusted players may be allowed to trigger FX Bus effects where appropriate
+untrusted players remain blocked from broadcasting effects
+copied macros should make their permission behaviour clear
+received payloads should include enough sender information for validation and debugging
+
+This would allow player-facing cinematic macros without making FX Bus a general unrestricted player broadcast system.
+
 ## Not planned
 
 FX Bus does not currently plan to include:
