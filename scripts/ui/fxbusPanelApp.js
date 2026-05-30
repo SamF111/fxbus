@@ -42,6 +42,7 @@ import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
 import { tokenLaserTabDef } from "./tabs/tokenLaserTab.js";
 import { tokenRecoilTabDef } from "./tabs/tokenRecoilTab.js";
 import { tileOscTabDef } from "./tabs/tileOscTab.js";
+import { tileFlickerTabDef } from "./tabs/tileFlickerTab.js";
 import { screenShakeTabDef } from "./tabs/screenShakeTab.js";
 import { screenRotateTabDef } from "./tabs/screenRotateTab.js";
 import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
@@ -70,6 +71,7 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenLaserTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tileFlickerTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenRotateTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
@@ -148,7 +150,9 @@ function buildGroups() {
   const tokenOsc = tokenOscTabDef();
   const tokenLaser = tokenLaserTabDef();
   const tokenRecoil = tokenRecoilTabDef();
+
   const tileOsc = tileOscTabDef();
+  const tileFlicker = tileFlickerTabDef();
 
   const screenShake = screenShakeTabDef();
   const screenPulse = screenPulseTabDef();
@@ -176,7 +180,8 @@ function buildGroups() {
       id: "tile",
       label: "Tile",
       tabs: [
-        tileOsc
+        tileOsc,
+        tileFlicker
       ]
     },
     {

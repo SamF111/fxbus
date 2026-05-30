@@ -20,6 +20,7 @@ import { registerScreenMonochromeFx } from "./screenMonochromeFx.js";
 import { registerScreenRotateFx } from "./screenRotateFx.js";
 
 import { registerTileOscillationFx } from "./tileOscillationFx.js";
+import { registerTileFlickerFx } from "./tileFlickerFx.js";
 
 import { registerFxbusResetFx } from "./fxbusResetFx.js";
 
@@ -40,6 +41,7 @@ export function registerBuiltInEffects(runtime) {
   registerScreenRotateFx(runtime);
 
   registerTileOscillationFx(runtime);
+  registerTileFlickerFx(runtime);
 
   registerFxbusResetFx(runtime);
 }

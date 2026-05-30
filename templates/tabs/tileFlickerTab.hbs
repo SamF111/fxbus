@@ -1,0 +1,147 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tileFlickerTab.hbs --}}
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Min alpha</label>
+    <input
+      type="number"
+      name="tileFlickerMinAlpha"
+      value="0.35"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Max alpha</label>
+    <input
+      type="number"
+      name="tileFlickerMaxAlpha"
+      value="1.0"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Frequency (Hz)</label>
+    <input
+      type="number"
+      name="tileFlickerFreqHz"
+      value="8"
+      step="0.1"
+      min="0.1"
+      max="60"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Jitter</label>
+    <input
+      type="number"
+      name="tileFlickerJitter"
+      value="0.25"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Blend</label>
+    <select name="tileFlickerBlendMode">
+      <option value="NORMAL" selected>Normal</option>
+      <option value="ADD">Add</option>
+      <option value="SCREEN">Screen</option>
+      <option value="MULTIPLY">Multiply</option>
+      <option value="OVERLAY">Overlay</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Foreground fade alpha</label>
+    <input
+      type="number"
+      name="tileFlickerForegroundFadeAlpha"
+      value="0.25"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input
+      type="checkbox"
+      name="tileFlickerRandomPhase"
+      checked
+    />
+    Random phase per tile
+  </label>
+</div>
+
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input
+      type="checkbox"
+      name="tileFlickerUseTint"
+    />
+    Apply tint while flickering
+  </label>
+</div>
+
+<div class="form-group">
+  <label>Tint</label>
+  <div class="fxbus-inline">
+    <input
+      type="color"
+      name="tileFlickerTintPicker"
+      value="#ffffff"
+    />
+    <input
+      type="text"
+      name="tileFlickerTint"
+      value="#ffffff"
+      placeholder="#rrggbb"
+    />
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button
+    type="button"
+    data-action="tileFlickerApply"
+  >Apply</button>
+
+  <button
+    type="button"
+    data-action="tileFlickerStopSelected"
+    class="fxbus-smallbtn"
+  >Stop Selected</button>
+
+  <button
+    type="button"
+    data-action="tileFlickerStopAll"
+    class="fxbus-smallbtn"
+  >Stop All</button>
+
+  <button
+    type="button"
+    data-action="fxbusCopyToMacro"
+    class="fxbus-smallbtn"
+  >Copy Macro</button>
+</div>
+
+<p class="fxbus-muted">
+  Applies visual-only flicker to selected tiles. No tile documents are changed.
+</p>

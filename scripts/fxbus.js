@@ -60,6 +60,7 @@ function getOrCreateRuntime() {
 
     tickers: new Map(),
     tokenFx: new Map(),
+    tileFx: new Map(),
     screenFx: new Map(),
     handlers: new Map(),
 

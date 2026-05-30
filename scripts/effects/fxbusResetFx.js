@@ -34,6 +34,7 @@ const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
 // Tile stop actions
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
 const TILE_OSC_STOP_LEGACY = "tileOscStop";
+const TILE_FLICKER_STOP = "fx.tileFlicker.stop";
 
 // Screen stop actions
 const SCREEN_SHAKE_STOP = "fx.screenShake.stop";
@@ -198,7 +199,7 @@ function onReset(runtime) {
    *
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
    * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
-   * 3. Stop tile effects using explicit tileIds so tile transforms restore.
+   * 3. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
    * 4. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
    * 5. Remove any residual tickers.
    * 6. Clear runtime maps as a final backstop.
@@ -252,6 +253,21 @@ function onReset(runtime) {
         tileIds
       });
     }
+
+    if (hasHandler(runtime, TILE_FLICKER_STOP)) {
+      safeCallHandler(runtime, TILE_FLICKER_STOP, {
+        action: TILE_FLICKER_STOP,
+        tileIds
+      });
+    }
+  } else {
+    stopIfPresent(runtime, TILE_OSC_STOP, {
+      action: TILE_OSC_STOP
+    });
+
+    stopIfPresent(runtime, TILE_FLICKER_STOP, {
+      action: TILE_FLICKER_STOP
+    });
   }
 
   stopIfPresent(runtime, SCREEN_SHAKE_STOP);
@@ -274,6 +290,8 @@ function onReset(runtime) {
 
   clearMapLike(runtime.tokenFx);
   clearMapLike(runtime.tileFx);
+  clearMapLike(runtime.tileCloneFx);
+  clearMapLike(runtime.tileCloneContainer);
   clearMapLike(runtime.screenFx);
 
   console.log("[FX Bus] Global reset executed (restored).");
