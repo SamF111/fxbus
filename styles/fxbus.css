@@ -1,11 +1,18 @@
+/* D:\FoundryVTT\Data\modules\fxbus\styles\fxbus.css */
+
 /**
  * FX Bus
  * Minimal styling namespace.
  *
  * Scope:
  * - Dialogs and UI elements created by FX Bus macros.
- * - Intentionally lightweight to avoid theme conflicts.
+ * - GM control panel ApplicationV2 styling.
+ * - Scoped under FX Bus classes to avoid theme conflicts.
  */
+
+/* -------------------------------------------- */
+/* Macro dialogs                                */
+/* -------------------------------------------- */
 
 .fxbus-dialog {
   font-size: 0.9rem;
@@ -23,4 +30,272 @@
   margin: 0.75rem 0;
   border: none;
   border-top: 1px solid var(--color-border-light-1);
+}
+
+/* -------------------------------------------- */
+/* GM control panel                             */
+/* -------------------------------------------- */
+
+.fxbus-panel-app .fxbus-panel {
+  color: var(--color-text-primary);
+}
+
+.fxbus-panel-app .fxbus-panel-layout {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  min-height: 430px;
+}
+
+.fxbus-panel-app .fxbus-category-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 8px 0;
+  border-right: 1px solid var(--color-border-light-tertiary, var(--color-border-light-primary));
+}
+
+.fxbus-panel-app .fxbus-category-tab {
+  display: block;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--color-text-primary);
+  border-radius: 3px;
+  padding: 6px 8px;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none;
+  line-height: 1.2;
+}
+
+.fxbus-panel-app .fxbus-category-tab:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.fxbus-panel-app .fxbus-category-tab:focus {
+  outline: 2px solid var(--color-border-highlight);
+  outline-offset: 1px;
+}
+
+.fxbus-panel-app .fxbus-category-tab.active {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: transparent;
+  border-left: 3px solid var(--color-border-highlight);
+  padding-left: 6px;
+  font-weight: 700;
+}
+
+.fxbus-panel-app .fxbus-category-tab[data-category="reset"] {
+  margin-top: 6px;
+  color: var(--color-text-danger, var(--color-text-primary));
+}
+
+.fxbus-panel-app .fxbus-category-tab[data-category="reset"].active {
+  background: var(--color-bg-danger, rgba(0, 0, 0, 0.06));
+  border-color: transparent;
+  border-left: 3px solid var(--color-border-danger, var(--color-border-highlight));
+}
+
+.fxbus-panel-app .fxbus-main {
+  min-width: 0;
+  max-width: 880px;
+  padding-top: 8px;
+}
+
+.fxbus-panel-app .fxbus-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding: 0;
+  margin: 0 0 14px 0;
+  border-bottom: 1px solid var(--color-border-light-primary);
+  max-width: 100%;
+}
+
+.fxbus-panel-app .fxbus-subtab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 150px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--color-text-primary);
+  border-radius: 4px 4px 0 0;
+  padding: 6px 9px 7px 9px;
+  cursor: pointer;
+  user-select: none;
+  text-decoration: none;
+  line-height: 1.2;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+
+.fxbus-panel-app .fxbus-subtab:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.fxbus-panel-app .fxbus-subtab:focus {
+  outline: 2px solid var(--color-border-highlight);
+  outline-offset: 1px;
+}
+
+.fxbus-panel-app .fxbus-subtab.active {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: var(--color-border-light-primary);
+  border-bottom-color: transparent;
+  font-weight: 700;
+}
+
+.fxbus-panel-app .fxbus-effect-body {
+  min-width: 0;
+  max-width: 840px;
+  padding-top: 2px;
+}
+
+.fxbus-panel-app .fxbus-panel-section {
+  padding-top: 0;
+}
+
+.fxbus-panel-app .fxbus-muted {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-12);
+  line-height: 1.35;
+  opacity: 0.9;
+  margin: 0 0 8px 0;
+}
+
+.fxbus-panel-app .fxbus-grid-2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px 12px;
+  max-width: 840px;
+}
+
+.fxbus-panel-app .fxbus-inline {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.fxbus-panel-app .fxbus-inline input[type="color"] {
+  flex: 0 0 48px;
+  width: 48px;
+  min-width: 48px;
+  height: 30px;
+  padding: 2px;
+}
+
+.fxbus-panel-app .fxbus-inline input[type="text"] {
+  flex: 1 1 auto;
+}
+
+.fxbus-panel-app .fxbus-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.fxbus-panel-app .fxbus-row button {
+  min-width: 110px;
+}
+
+.fxbus-panel-app .fxbus-smallbtn {
+  min-width: 90px !important;
+}
+
+.fxbus-panel-app .fxbus-divider {
+  margin: 12px 0;
+  border: none;
+  border-top: 1px solid rgba(120, 90, 40, 0.22);
+}
+
+.fxbus-panel-app .form-group {
+  margin: 6px 0;
+}
+
+.fxbus-panel-app label {
+  font-weight: 600;
+}
+
+.fxbus-panel-app .fxbus-panel input[type="number"],
+.fxbus-panel-app .fxbus-panel input[type="text"],
+.fxbus-panel-app .fxbus-panel select {
+  width: 100%;
+  min-height: 30px;
+}
+
+.fxbus-panel-app .fxbus-panel input[type="color"] {
+  min-height: 30px;
+}
+
+.fxbus-panel-app .fxbus-panel input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+.fxbus-panel-app input:disabled,
+.fxbus-panel-app select:disabled,
+.fxbus-panel-app textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Deterministic visibility: only the active category/tab body displays. */
+
+.fxbus-panel-app .fxbus-panel-section.tab {
+  display: none;
+}
+
+.fxbus-panel-app .fxbus-panel-section.tab.active {
+  display: block;
+}
+
+/* -------------------------------------------- */
+/* Narrow panel behaviour                       */
+/* -------------------------------------------- */
+
+@media (max-width: 620px) {
+  .fxbus-panel-app .fxbus-panel-layout {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .fxbus-panel-app .fxbus-category-rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0 0 8px 0;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border-light-primary);
+  }
+
+  .fxbus-panel-app .fxbus-category-tab {
+    text-align: center;
+  }
+
+  .fxbus-panel-app .fxbus-category-tab.active {
+    border-left: 1px solid var(--color-border-highlight);
+    padding-left: 8px;
+  }
+
+  .fxbus-panel-app .fxbus-subtab {
+    min-width: 0;
+    max-width: none;
+    white-space: normal;
+  }
+
+  .fxbus-panel-app .fxbus-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }

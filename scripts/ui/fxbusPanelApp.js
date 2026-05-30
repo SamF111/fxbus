@@ -6,39 +6,36 @@
  * Purpose:
  * - Render the GM-only FX Bus control panel.
  * - Load tab templates as Handlebars partials.
+ * - Present effects through grouped GUI categories.
  * - Wire each tab definition to the rendered form.
  * - Persist panel field values per client.
+ * - Persist active category and active tab per client.
  * - Support Copy to Macro through each tab's buildApplyPayload(root, runtime).
  * - Support custom tab macro source through buildMacroSource(root, runtime, options).
  * - Keep panel tab selection consistent with FX Bus panel navigation.
  *
- * Selection-layer behaviour:
- * - Each tab may declare selectionLayer: "tokens", "tiles", or null.
- * - Token Oscillation should declare "tokens".
- * - Token Tether should declare "tokens".
- * - Token Recoil should declare "tokens".
- * - Tile Oscillation should declare "tiles".
- * - Screen FX tabs omit selectionLayer or set it to null.
- * - The panel activates the declared native Foundry selection layer when opened
- *   directly onto a tab or when a tab is clicked inside the panel.
+ * Category selection behaviour:
+ * - Token category activates Foundry's native Token select tool.
+ * - Tile category activates Foundry's native Tile select tool.
+ * - Screen category leaves the current Foundry selection mode alone.
+ * - Canvas category leaves the current Foundry selection mode alone.
+ * - Reset category leaves the current Foundry selection mode alone.
+ *
+ * GUI category rule:
+ * - GUI category and implementation name are separate concepts.
+ * - Existing internal names and action strings are preserved.
+ * - screenRotate remains internally named screenRotate/rotate.
+ * - screenRotate is presented in the GUI as Canvas > Roll.
  *
  * Current v14 stability decision:
  * - Token Tether is enabled.
  * - Token Tether does not use live token-summary hooks or MutationObserver logic.
  * - Token/tile targeting is read only when Apply, Toggle, or macro generation runs.
  *
- * Tab requirements:
- * - Add the tab definition import.
- * - Add the tab template path to TAB_PARTIALS.
- * - Add the tab definition to buildTabs().
- * - Add the tab section to fxbus-panel.hbs.
- * - Add data-action="fxbusCopyToMacro" in the tab template when macro export is wanted.
- * - Add selectionLayer to the tab definition when the tab needs a native selection layer.
- *
  * DOM lifecycle:
  * - Foundry destroys the panel DOM on close.
  * - Tab handlers are rebound on every render.
- * - AbortController prevents stacked tab-navigation listeners across re-renders.
+ * - AbortController prevents stacked navigation listeners across re-renders.
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
@@ -119,36 +116,110 @@ async function preloadFxBusTemplates() {
   TEMPLATES_PRELOADED = true;
 }
 
-function buildTabs() {
+function relabelTab(tabDef, label) {
   /**
    * Large comment:
-   * Build the enabled tab definition list used by the GM panel.
+   * Return the same tab definition with a GUI-only label override.
    *
-   * Each tab definition is responsible for:
-   * - id
-   * - label
-   * - wire(root, runtime)
-   * - optional selectionLayer: "tokens", "tiles", or null
-   * - optional buildApplyPayload(root, runtime) for generic Copy to Macro
-   * - optional buildMacroSource(root, runtime, options) for custom Copy to Macro
+   * This does not rename tab ids, files, action strings, socket actions, or effect
+   * implementation names. It only changes the label presented in the panel.
    */
+  return {
+    ...tabDef,
+    label
+  };
+}
+
+function buildGroups() {
+  /**
+   * Large comment:
+   * Build the grouped GUI model used by the GM panel.
+   *
+   * Category ids are presentation ids:
+   * - token
+   * - tile
+   * - screen
+   * - canvas
+   * - reset
+   *
+   * Tab ids remain implementation-facing ids so existing tab definitions, DOM
+   * selectors, macro builders, and action strings stay stable.
+   */
+  const tokenOsc = tokenOscTabDef();
+  const tokenLaser = tokenLaserTabDef();
+  const tokenRecoil = tokenRecoilTabDef();
+  const tileOsc = tileOscTabDef();
+
+  const screenShake = screenShakeTabDef();
+  const screenPulse = screenPulseTabDef();
+  const screenVignette = screenVignetteTabDef();
+  const screenChromAb = screenChromAbTabDef();
+  const screenNoise = screenNoiseTabDef();
+  const screenBlur = screenBlurTabDef();
+  const screenSmear = screenSmearTabDef();
+  const screenStreak = screenStreakTabDef();
+  const screenMonochrome = screenMonochromeTabDef();
+
+  const screenRotate = relabelTab(screenRotateTabDef(), "Roll");
+
   return [
-    tokenOscTabDef(),
-    tokenLaserTabDef(),
-    tokenRecoilTabDef(),
-    tileOscTabDef(),
-    screenShakeTabDef(),
-    screenRotateTabDef(),
-    screenPulseTabDef(),
-    screenVignetteTabDef(),
-    screenChromAbTabDef(),
-    screenNoiseTabDef(),
-    screenBlurTabDef(),
-    screenSmearTabDef(),
-    screenStreakTabDef(),
-    screenMonochromeTabDef(),
-    resetTabDef()
+    {
+      id: "token",
+      label: "Token",
+      tabs: [
+        tokenOsc,
+        relabelTab(tokenLaser, "Tether"),
+        tokenRecoil
+      ]
+    },
+    {
+      id: "tile",
+      label: "Tile",
+      tabs: [
+        tileOsc
+      ]
+    },
+    {
+      id: "screen",
+      label: "Screen",
+      tabs: [
+        screenShake,
+        screenPulse,
+        screenVignette,
+        screenChromAb,
+        screenNoise,
+        screenBlur,
+        screenSmear,
+        screenStreak,
+        screenMonochrome
+      ]
+    },
+    {
+      id: "canvas",
+      label: "Canvas",
+      tabs: [
+        screenRotate
+      ]
+    },
+    {
+      id: "reset",
+      label: "Reset",
+      tabs: [
+        resetTabDef()
+      ]
+    }
   ];
+}
+
+function flattenGroups(groups) {
+  /**
+   * Large comment:
+   * Flatten all grouped tab definitions into a single list for legacy operations.
+   *
+   * Existing code paths such as tab wiring and tab-id lookup are still easier and
+   * safer against current tab implementations when backed by a flat list.
+   */
+  return groups.flatMap((group) => group.tabs);
 }
 
 function readState() {
@@ -177,8 +248,12 @@ function applyStateToForm(root, state) {
    *
    * Values are matched by input name. This keeps field persistence generic and
    * avoids tab-specific persistence logic.
+   *
+   * Internal navigation state keys are ignored because they are not form fields.
    */
   for (const [name, value] of Object.entries(state ?? {})) {
+    if (String(name).startsWith("__")) continue;
+
     const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
     if (!el) continue;
 
@@ -249,31 +324,228 @@ function wireStatePersistence(root) {
   root.addEventListener("change", scheduleSave, true);
 }
 
-function setActiveTab(root, tabId) {
+function getGroupById(groups, categoryId) {
+  const id = String(categoryId ?? "");
+  if (!id) return null;
+  return groups.find((group) => group?.id === id) ?? null;
+}
+
+function getTabDefById(app, tabId) {
   /**
    * Large comment:
-   * Manual tab controller.
+   * Resolve a tab definition from the app's flattened tab list.
+   *
+   * This centralises tab lookup so macro export and any future tab-level metadata
+   * can share the same lookup logic.
+   */
+  const id = String(tabId ?? "");
+  if (!id) return null;
+
+  return app?._tabs?.find?.((t) => t?.id === id) ?? null;
+}
+
+function getTabDefInCategory(app, categoryId, tabId) {
+  /**
+   * Large comment:
+   * Resolve a tab definition from one category.
+   *
+   * This prevents duplicate tab ids in future categories from accidentally
+   * targeting the wrong tab. Current tab ids are unique, but the grouped model
+   * should still be category-aware.
+   */
+  const group = getGroupById(app?._groups ?? [], categoryId);
+  if (!group) return null;
+
+  const id = String(tabId ?? "");
+  if (!id) return null;
+
+  return group.tabs.find((tab) => tab?.id === id) ?? null;
+}
+
+function getFirstTabIdForCategory(groups, categoryId) {
+  const group = getGroupById(groups, categoryId);
+  return group?.tabs?.[0]?.id ?? null;
+}
+
+function findCategoryForTab(groups, tabId) {
+  /**
+   * Large comment:
+   * Resolve the first category containing a tab id.
+   *
+   * This maintains backward compatibility with old calls that only pass startTab.
+   * For example:
+   * - openFxBusGmControlPanel({ startTab: "pulse" })
+   *
+   * New calls should prefer:
+   * - openFxBusGmControlPanel({ startCategory: "screen", startTab: "pulse" })
+   */
+  const id = String(tabId ?? "");
+  if (!id) return null;
+
+  for (const group of groups) {
+    if (group.tabs.some((tab) => tab?.id === id)) return group.id;
+  }
+
+  return null;
+}
+
+function normaliseRequestedPanelState(groups, requestedCategory, requestedTab, rememberedCategory, rememberedTab) {
+  /**
+   * Large comment:
+   * Resolve the active category and tab for a render.
+   *
+   * Priority:
+   * 1. Explicit startCategory/startTab supplied by toolbar or caller.
+   * 2. Remembered __activeCategory/__activeTab from client settings.
+   * 3. Token category and its first tab.
+   *
+   * Invalid combinations are corrected by falling back to the first tab in the
+   * selected category.
+   */
+  let category =
+    typeof requestedCategory === "string" && requestedCategory.length
+      ? requestedCategory
+      : null;
+
+  let tab =
+    typeof requestedTab === "string" && requestedTab.length
+      ? requestedTab
+      : null;
+
+  if (!category && tab) {
+    category = findCategoryForTab(groups, tab);
+  }
+
+  if (!category) {
+    category =
+      typeof rememberedCategory === "string" && rememberedCategory.length
+        ? rememberedCategory
+        : null;
+  }
+
+  if (!tab) {
+    tab =
+      typeof rememberedTab === "string" && rememberedTab.length
+        ? rememberedTab
+        : null;
+  }
+
+  if (!getGroupById(groups, category)) {
+    category = "token";
+  }
+
+  if (!getGroupById(groups, category)) {
+    category = groups[0]?.id ?? null;
+  }
+
+  if (!category) {
+    return {
+      category: null,
+      tab: null
+    };
+  }
+
+  const group = getGroupById(groups, category);
+  const tabExistsInCategory = group?.tabs?.some?.((entry) => entry?.id === tab);
+
+  if (!tabExistsInCategory) {
+    tab = getFirstTabIdForCategory(groups, category);
+  }
+
+  return {
+    category,
+    tab
+  };
+}
+
+function decorateGroupsForContext(groups, activeCategory) {
+  return groups.map((group) => ({
+    id: group.id,
+    label: group.label,
+    active: group.id === activeCategory
+  }));
+}
+
+function decorateTabsForContext(group, activeTab) {
+  return (group?.tabs ?? []).map((tab) => ({
+    id: tab.id,
+    label: tab.label,
+    active: tab.id === activeTab
+  }));
+}
+
+function setActivePanelState(root, categoryId, tabId) {
+  /**
+   * Large comment:
+   * Manual grouped-tab controller.
    *
    * Foundry's ApplicationV2 tab helpers are intentionally avoided here. The panel
-   * owns tab selection by toggling active classes and deterministic display state.
+   * owns category and tab selection by toggling active classes and deterministic
+   * display state.
    */
+  const category = String(categoryId ?? "");
+  const tab = String(tabId ?? "");
+
+  const categoryItems = Array.from(
+    root.querySelectorAll(".fxbus-category-tab[data-category]")
+  );
+
   const navItems = Array.from(
     root.querySelectorAll(".tabs[data-group='fxbus'] .item[data-tab]")
   );
+
   const panels = Array.from(
-    root.querySelectorAll(".tab[data-group='fxbus'][data-tab]")
+    root.querySelectorAll(".tab[data-group='fxbus'][data-category][data-tab]")
   );
 
+  for (const a of categoryItems) {
+    const isActive = a.dataset.category === category;
+    a.classList.toggle("active", isActive);
+    a.setAttribute("aria-selected", isActive ? "true" : "false");
+  }
+
   for (const a of navItems) {
-    const isActive = a.dataset.tab === tabId;
+    const isActive = a.dataset.category === category && a.dataset.tab === tab;
     a.classList.toggle("active", isActive);
     a.setAttribute("aria-selected", isActive ? "true" : "false");
   }
 
   for (const s of panels) {
-    const isActive = s.dataset.tab === tabId;
+    const isActive = s.dataset.category === category && s.dataset.tab === tab;
     s.classList.toggle("active", isActive);
     s.style.display = isActive ? "" : "none";
+  }
+}
+
+function renderSubTabs(root, app) {
+  /**
+   * Large comment:
+   * Rebuild the sub-tab row for the current category without forcing a full
+   * ApplicationV2 render.
+   *
+   * The tab content sections are static in fxbus-panel.hbs; only the visible
+   * sub-tab navigation needs to change when a category is clicked.
+   */
+  const nav = root.querySelector(".tabs[data-group='fxbus'].fxbus-subtabs");
+  if (!nav) return;
+
+  const group = getGroupById(app._groups, app._activeCategory);
+  const tabs = group?.tabs ?? [];
+
+  nav.innerHTML = "";
+
+  for (const tab of tabs) {
+    const a = document.createElement("a");
+    a.className = "item fxbus-subtab";
+    a.dataset.group = "fxbus";
+    a.dataset.category = app._activeCategory;
+    a.dataset.tab = tab.id;
+    a.setAttribute("aria-selected", tab.id === app._activeTab ? "true" : "false");
+    a.textContent = tab.label;
+
+    if (tab.id === app._activeTab) a.classList.add("active");
+
+    nav.appendChild(a);
   }
 }
 
@@ -398,47 +670,117 @@ async function activateNativeSelectionLayer(selectionLayer) {
   }
 }
 
-function getTabDefById(app, tabId) {
+function selectionLayerForCategory(categoryId) {
   /**
    * Large comment:
-   * Resolve a tab definition from the app's tab list.
+   * Resolve the native Foundry selection layer implied by a top-level FX Bus
+   * category.
    *
-   * This centralises tab lookup so selection-layer activation, macro export, and
-   * any future tab-level metadata can share the same lookup logic.
+   * This is intentionally category-level behaviour:
+   * - Token category means token selection is appropriate.
+   * - Tile category means tile selection is appropriate.
+   * - Screen, Canvas, and Reset do not require native selection changes.
    */
-  const id = String(tabId ?? "");
-  if (!id) return null;
+  const id = String(categoryId ?? "");
 
-  return app?._tabs?.find?.((t) => t?.id === id) ?? null;
+  if (id === "token") return "tokens";
+  if (id === "tile") return "tiles";
+
+  return null;
 }
 
-async function activatePanelSelectionMode(app, tabId) {
+async function activateCategorySelectionMode(categoryId) {
   /**
    * Large comment:
-   * Activate the native Foundry selection layer declared by the active tab.
+   * Activate native Foundry selection based on the active FX Bus category.
    *
-   * The tab owns this decision through tabDef.selectionLayer:
-   * - "tokens" for token-based FX
-   * - "tiles" for tile-based FX
-   * - null/undefined for screen FX
+   * Category-level switching is deliberate. Opening Token FX should prepare token
+   * selection. Opening Tile FX should prepare tile selection. Screen and Canvas
+   * effects should not steal native Foundry selection mode.
    */
-  const tabDef = getTabDefById(app, tabId);
-  const selectionLayer = tabDef?.selectionLayer ?? null;
-
+  const selectionLayer = selectionLayerForCategory(categoryId);
   if (!selectionLayer) return;
 
   await activateNativeSelectionLayer(selectionLayer);
 }
 
-function wireTabClicks(app, root, abortSignal) {
+async function commitPanelNavigation(app, root, categoryId, tabId, options = {}) {
   /**
    * Large comment:
-   * Wire panel tab navigation.
+   * Commit a category/tab navigation change.
    *
-   * Tab clicks change the visible panel tab and activate any native Foundry
-   * selection layer declared by the clicked tab's metadata.
+   * This updates the app instance state, rebuilds sub-tabs if required, updates
+   * visible panels, activates native category selection if needed, and persists
+   * the new active category/tab pair.
    */
-  const nav = root.querySelector(".tabs[data-group='fxbus']");
+  const previousCategory = app._activeCategory;
+
+  app._activeCategory = categoryId;
+  app._activeTab = tabId;
+
+  if (options.rebuildSubTabs || previousCategory !== categoryId) {
+    renderSubTabs(root, app);
+  }
+
+  setActivePanelState(root, app._activeCategory, app._activeTab);
+
+  await activateCategorySelectionMode(app._activeCategory);
+
+  await writeState({
+    __activeCategory: app._activeCategory,
+    __activeTab: app._activeTab
+  });
+}
+
+function wireCategoryClicks(app, root, abortSignal) {
+  /**
+   * Large comment:
+   * Wire left-rail category navigation.
+   *
+   * A category click keeps the current active tab only if that tab exists in the
+   * new category. Otherwise it switches to the first tab in the selected category.
+   */
+  const nav = root.querySelector(".fxbus-category-rail");
+  if (!nav) return;
+
+  nav.addEventListener(
+    "click",
+    async (event) => {
+      const a = event.target?.closest?.(".fxbus-category-tab[data-category]");
+      if (!a) return;
+
+      event.preventDefault();
+
+      const categoryId = String(a.dataset.category ?? "");
+      if (!categoryId) return;
+
+      const group = getGroupById(app._groups, categoryId);
+      if (!group) return;
+
+      const currentTabExists = group.tabs.some((tab) => tab?.id === app._activeTab);
+      const tabId = currentTabExists
+        ? app._activeTab
+        : group.tabs[0]?.id;
+
+      if (!tabId) return;
+
+      await commitPanelNavigation(app, root, categoryId, tabId, {
+        rebuildSubTabs: true
+      });
+    },
+    { capture: true, signal: abortSignal }
+  );
+}
+
+function wireSubTabClicks(app, root, abortSignal) {
+  /**
+   * Large comment:
+   * Wire effect sub-tab navigation for the currently selected category.
+   *
+   * Because the sub-tab row is rebuilt when categories change, event delegation
+   * is attached to the stable nav container rather than individual anchors.
+   */
+  const nav = root.querySelector(".tabs[data-group='fxbus'].fxbus-subtabs");
   if (!nav) return;
 
   nav.addEventListener(
@@ -449,24 +791,29 @@ function wireTabClicks(app, root, abortSignal) {
 
       event.preventDefault();
 
+      const categoryId = String(a.dataset.category ?? app._activeCategory ?? "");
       const tabId = String(a.dataset.tab ?? "");
-      if (!tabId) return;
 
-      app._activeTab = tabId;
-      setActiveTab(root, tabId);
+      if (!categoryId || !tabId) return;
 
-      await activatePanelSelectionMode(app, tabId);
-      await writeState({ __activeTab: tabId });
+      const tabDef = getTabDefInCategory(app, categoryId, tabId);
+      if (!tabDef) return;
+
+      await commitPanelNavigation(app, root, categoryId, tabId, {
+        rebuildSubTabs: false
+      });
     },
     { capture: true, signal: abortSignal }
   );
 }
 
 function getActiveTabDef(app) {
+  const categoryId = String(app?._activeCategory ?? "");
   const tabId = String(app?._activeTab ?? "");
-  if (!tabId) return null;
 
-  return getTabDefById(app, tabId);
+  if (!categoryId || !tabId) return null;
+
+  return getTabDefInCategory(app, categoryId, tabId) ?? getTabDefById(app, tabId);
 }
 
 function getFxBusModuleVersion() {
@@ -628,7 +975,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     tag: "div",
     classes: ["fxbus-panel-app"],
     window: { title: "FX Bus - GM Control Panel", resizable: true },
-    position: { width: 560, height: "auto" },
+    position: { width: 680, height: "auto" },
     actions: {
       fxbusDoReset: FxBusGmControlPanelApp._actionDoReset,
       fxbusCopyToMacro: FxBusGmControlPanelApp._actionCopyToMacro
@@ -642,18 +989,40 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(options = {}) {
     super(options);
 
-    this._tabs = buildTabs();
+    this._groups = buildGroups();
+    this._tabs = flattenGroups(this._groups);
     this._state = {};
+
+    this._activeCategory = "token";
     this._activeTab = "osc";
+
+    this._requestedStartCategory =
+      typeof options?.startCategory === "string" ? options.startCategory : null;
+
     this._requestedStartTab =
       typeof options?.startTab === "string" ? options.startTab : null;
 
     this._tabAbort = null;
   }
 
-  setRequestedStartTab(tabId) {
+  setRequestedStart(categoryId, tabId) {
+    this._requestedStartCategory =
+      typeof categoryId === "string" && categoryId.length ? categoryId : null;
+
     this._requestedStartTab =
       typeof tabId === "string" && tabId.length ? tabId : null;
+  }
+
+  setRequestedStartTab(tabId) {
+    /**
+     * Large comment:
+     * Backward-compatible shim for older callers.
+     *
+     * Old controls.js called setRequestedStartTab(tabId). The grouped GUI now
+     * prefers setRequestedStart(categoryId, tabId), but keeping this method makes
+     * the panel tolerant while controls.js is refactored.
+     */
+    this.setRequestedStart(null, tabId);
   }
 
   async _prepareContext(_options) {
@@ -661,18 +1030,36 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this._state = readState();
 
-    const requestedTab = this._requestedStartTab;
+    const rememberedCategory =
+      typeof this._state.__activeCategory === "string"
+        ? this._state.__activeCategory
+        : null;
+
     const rememberedTab =
-      typeof this._state.__activeTab === "string" ? this._state.__activeTab : null;
+      typeof this._state.__activeTab === "string"
+        ? this._state.__activeTab
+        : null;
 
-    const normalTabs = this._tabs.filter((t) => t?.id !== "reset");
-    const fallbackTab = normalTabs[0]?.id ?? "osc";
+    const resolved = normaliseRequestedPanelState(
+      this._groups,
+      this._requestedStartCategory,
+      this._requestedStartTab,
+      rememberedCategory,
+      rememberedTab
+    );
 
-    this._activeTab = requestedTab ?? rememberedTab ?? fallbackTab;
+    this._activeCategory = resolved.category ?? "token";
+    this._activeTab = resolved.tab ?? "osc";
+
+    this._requestedStartCategory = null;
     this._requestedStartTab = null;
 
+    const activeGroup = getGroupById(this._groups, this._activeCategory);
+
     return {
-      tabs: normalTabs.map((t) => ({ id: t.id, label: t.label })),
+      groups: decorateGroupsForContext(this._groups, this._activeCategory),
+      activeCategory: this._activeCategory,
+      activeTabs: decorateTabsForContext(activeGroup, this._activeTab),
       activeTab: this._activeTab
     };
   }
@@ -693,19 +1080,21 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     wireStatePersistence(root);
-    setActiveTab(root, this._activeTab);
+    renderSubTabs(root, this);
+    setActivePanelState(root, this._activeCategory, this._activeTab);
 
     /**
      * Large comment:
-     * Keep direct panel opens consistent with panel tab clicks.
+     * Keep direct panel opens consistent with category behaviour.
      *
-     * Direct opens from scene-control buttons set _requestedStartTab, which
-     * becomes _activeTab during _prepareContext(). If that active tab declares a
-     * native selectionLayer, activate it now.
+     * Direct opens from scene-control buttons set _requestedStartCategory and/or
+     * _requestedStartTab, which become the active panel state during
+     * _prepareContext(). Category-level selection then prepares Token or Tile
+     * selection where appropriate.
      */
-    activatePanelSelectionMode(this, this._activeTab).catch((err) => {
-      console.warn("[FX Bus] Initial panel selection-layer activation failed.", {
-        tabId: this._activeTab,
+    activateCategorySelectionMode(this._activeCategory).catch((err) => {
+      console.warn("[FX Bus] Initial category selection-layer activation failed.", {
+        categoryId: this._activeCategory,
         err
       });
     });
@@ -717,7 +1106,8 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     this._tabAbort = new AbortController();
-    wireTabClicks(this, root, this._tabAbort.signal);
+    wireCategoryClicks(this, root, this._tabAbort.signal);
+    wireSubTabClicks(this, root, this._tabAbort.signal);
   }
 
   async _onClose(_options) {
@@ -772,10 +1162,13 @@ export async function openFxBusGmControlPanel(options = {}) {
   }
 
   if (!panelSingleton) {
-    panelSingleton = new FxBusGmControlPanelApp({ startTab: options.startTab });
+    panelSingleton = new FxBusGmControlPanelApp({
+      startCategory: options.startCategory,
+      startTab: options.startTab
+    });
   }
 
-  panelSingleton.setRequestedStartTab(options.startTab);
+  panelSingleton.setRequestedStart(options.startCategory, options.startTab);
 
   await panelSingleton.render(true);
 }

@@ -5,25 +5,29 @@
  *
  * Purpose:
  * - Add one GM-only FX Bus control group.
- * - Open the FX Bus panel directly on a requested tab.
- * - Provide explicit Token/Tiles selection helper buttons.
+ * - Keep the Foundry scene toolbar compact.
+ * - Open the FX Bus panel directly on a requested category.
  * - Provide a toolbar reset action.
  *
  * v13/v14 compatibility:
  * - Uses compat.js for array/object scene-control handling.
  * - Keeps a hidden inert select tool so Foundry has a valid activeTool.
- * - Does not automatically force native Token/Tiles selection when opening FX tabs.
+ * - Does not expose every FX Bus effect as a toolbar button.
  * - Does not call canvas.tokens.activate() or canvas.tiles.activate().
  *
- * Selection model:
- * - "Select Tokens" explicitly activates Foundry's native Token select tool.
- * - "Select Tiles" explicitly activates Foundry's native Tiles select tool.
- * - Token Oscillation, Token Tether, Token Recoil, and Tile Oscillation only open their tabs.
- * - Screen FX leave the current selection mode alone.
+ * Toolbar model:
+ * - Toolbar opens categories.
+ * - Panel contains the detailed effect list.
  *
- * Token Tether:
- * - Re-enabled after isolated macro testing.
- * - The toolbar button only opens the Token Tether tab.
+ * Selection model:
+ * - Token FX, Tile FX, Screen FX, and Canvas FX only open the panel category.
+ * - Panel tabs may activate their declared native selection layer where appropriate.
+ * - Screen FX and Canvas FX leave the current selection mode alone.
+ *
+ * GUI category rule:
+ * - Canvas is the user-facing category for render/canvas/view transforms.
+ * - Internal implementation names may remain screenRotate, rotate, etc.
+ * - The toolbar says Canvas FX, not Screen Rotate.
  */
 
 import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
@@ -40,109 +44,55 @@ const LAYER_NAME = "token";
 const HOOK_ID = "getSceneControlButtons";
 const SAFE_TOOL = "select";
 
-const TOOL_DEFS = [
+const CATEGORY_TOOL_DEFS = [
   {
-    name: "fxbus-select-tokens",
-    title: "Select Tokens",
+    name: "fxbus-token",
+    title: "Token FX",
     icon: "fas fa-user-circle",
-    tab: "osc",
-    selectLayer: "tokens"
+    startCategory: "token"
   },
   {
-    name: "fxbus-select-tiles",
-    title: "Select Tiles",
+    name: "fxbus-tile",
+    title: "Tile FX",
     icon: "fas fa-layer-group",
-    tab: "tileOsc",
-    selectLayer: "tiles"
+    startCategory: "tile"
   },
   {
-    name: "fxbus-osc",
-    title: "Token Oscillation",
-    icon: "fas fa-ship",
-    tab: "osc"
+    name: "fxbus-screen",
+    title: "Screen FX",
+    icon: "fas fa-desktop",
+    startCategory: "screen"
   },
   {
-    name: "fxbus-laser",
-    title: "Token Tether",
-    icon: "fas fa-link",
-    tab: "laser"
-  },
-  {
-    name: "fxbus-recoil",
-    title: "Token Recoil",
-    icon: "fas fa-burst",
-    tab: "recoil"
-  },
-  {
-    name: "fxbus-tile-osc",
-    title: "Tile Oscillation",
-    icon: "fas fa-tree",
-    tab: "tileOsc"
-  },
-  {
-    name: "fxbus-shake",
-    title: "Screen Shake",
-    icon: "fas fa-wave-square",
-    tab: "shake"
-  },
-  {
-    name: "fxbus-rotate",
-    title: "Screen Rotate",
-    icon: "fas fa-sync-alt",
-    tab: "rotate"
-  },
-  {
-    name: "fxbus-pulse",
-    title: "Screen Pulse",
-    icon: "fas fa-exclamation-triangle",
-    tab: "pulse"
-  },
-  {
-    name: "fxbus-vignette",
-    title: "Vignette",
-    icon: "fas fa-circle",
-    tab: "vignette"
-  },
-  {
-    name: "fxbus-chromab",
-    title: "Chromatic Aberration",
-    icon: "fas fa-adjust",
-    tab: "chromab"
-  },
-  {
-    name: "fxbus-noise",
-    title: "Screen Noise",
-    icon: "fas fa-braille",
-    tab: "noise"
-  },
-  {
-    name: "fxbus-blur",
-    title: "Screen Blur",
-    icon: "fas fa-eye-slash",
-    tab: "blur"
-  },
-  {
-    name: "fxbus-smear",
-    title: "Screen Smear",
-    icon: "fas fa-water",
-    tab: "smear"
-  },
-  {
-    name: "fxbus-streak",
-    title: "Screen Streak",
-    icon: "fas fa-wind",
-    tab: "streak"
-  },
-  {
-    name: "fxbus-monochrome",
-    title: "Monochrome",
-    icon: "fas fa-film",
-    tab: "monochrome"
+    name: "fxbus-canvas",
+    title: "Canvas FX",
+    icon: "fas fa-vector-square",
+    startCategory: "canvas"
   }
 ];
 
-function openTab(startTab) {
-  openFxBusGmControlPanel({ startTab });
+const OLD_TOOL_NAMES = [
+  "fxbus-open",
+  "fxbus-select-tokens",
+  "fxbus-select-tiles",
+  "fxbus-osc",
+  "fxbus-laser",
+  "fxbus-recoil",
+  "fxbus-tile-osc",
+  "fxbus-shake",
+  "fxbus-rotate",
+  "fxbus-pulse",
+  "fxbus-vignette",
+  "fxbus-chromab",
+  "fxbus-noise",
+  "fxbus-blur",
+  "fxbus-smear",
+  "fxbus-streak",
+  "fxbus-monochrome"
+];
+
+function openPanel(options = {}) {
+  openFxBusGmControlPanel(options);
 }
 
 function resetAll() {
@@ -152,136 +102,15 @@ function resetAll() {
   runtime.emit({ action: "fx.bus.reset" });
 }
 
-function getSceneControlsCollection() {
-  return ui?.controls?.controls ?? null;
-}
-
-function getNativeControl(controlNames) {
-  /**
-   * Large comment:
-   * Resolve a native Foundry control group by likely names.
-   *
-   * Foundry versions and modules may expose control collections as either arrays
-   * or object maps. v14 commonly uses object maps, while older/module-influenced
-   * flows may still present arrays.
-   */
-  const controls = getSceneControlsCollection();
-  if (!controls) return null;
-
-  if (Array.isArray(controls)) {
-    return controls.find((control) => controlNames.includes(control?.name)) ?? null;
-  }
-
-  if (typeof controls === "object") {
-    for (const name of controlNames) {
-      if (controls[name]) return controls[name];
-    }
-
-    const values = Object.values(controls);
-    return values.find((control) => controlNames.includes(control?.name)) ?? null;
-  }
-
-  return null;
-}
-
-function getToolName(control, preferredName = "select") {
-  /**
-   * Large comment:
-   * Resolve the safest selectable tool name for a native Foundry control group.
-   *
-   * Prefer "select". If unavailable, fall back to the control's activeTool. If
-   * that is also unavailable, use the first named tool.
-   */
-  const tools = control?.tools;
-
-  if (!tools) return preferredName;
-
-  if (Array.isArray(tools)) {
-    if (tools.some((tool) => tool?.name === preferredName)) return preferredName;
-
-    if (typeof control?.activeTool === "string" && control.activeTool.length > 0) {
-      return control.activeTool;
-    }
-
-    return tools.find((tool) => typeof tool?.name === "string" && tool.name.length > 0)?.name ?? preferredName;
-  }
-
-  if (typeof tools === "object") {
-    if (tools[preferredName]) return preferredName;
-
-    if (typeof control?.activeTool === "string" && control.activeTool.length > 0) {
-      return control.activeTool;
-    }
-
-    return Object.values(tools).find((tool) => typeof tool?.name === "string" && tool.name.length > 0)?.name ?? preferredName;
-  }
-
-  return preferredName;
-}
-
-async function activateNativeSelectionLayer(selectLayer) {
-  /**
-   * Large comment:
-   * Explicitly activate a native Foundry selection layer.
-   *
-   * This is only called from the dedicated "Select Tokens" and "Select Tiles"
-   * FX Bus toolbar buttons. It is not called when opening normal FX tabs.
-   */
-  const controlsUi = ui?.controls;
-
-  if (!controlsUi || typeof controlsUi.activate !== "function") {
-    ui.notifications.warn("FX Bus: native controls API unavailable.");
-    return false;
-  }
-
-  const control =
-    selectLayer === "tokens"
-      ? getNativeControl(["tokens", "token"])
-      : selectLayer === "tiles"
-        ? getNativeControl(["tiles", "tile"])
-        : null;
-
-  if (!control?.name) {
-    ui.notifications.warn(`FX Bus: could not find native ${selectLayer} controls.`);
-    return false;
-  }
-
-  const toolName = getToolName(control, SAFE_TOOL);
-
-  try {
-    await controlsUi.activate({ control: control.name, tool: toolName });
-
-    ui.notifications.info(
-      selectLayer === "tokens"
-        ? "FX Bus: token selection enabled."
-        : "FX Bus: tile selection enabled."
-    );
-
-    return true;
-  } catch (err) {
-    console.warn("[FX Bus] Native selection activation failed.", {
-      selectLayer,
-      controlName: control.name,
-      toolName,
-      err
-    });
-
-    ui.notifications.warn(`FX Bus: failed to activate ${selectLayer} selection.`);
-    return false;
-  }
-}
-
-function makePanelTool(def) {
+function makeCategoryTool(def) {
   return makePassiveSceneTool({
     name: def.name,
     title: def.title,
     icon: def.icon,
-    onActivate: async () => {
-      openTab(def.tab);
-
-      if (def.selectLayer) {
-        await activateNativeSelectionLayer(def.selectLayer);
-      }
+    onActivate: () => {
+      openPanel({
+        startCategory: def.startCategory
+      });
     }
   });
 }
@@ -300,7 +129,7 @@ function makeResetTool() {
 function makeFxbusToolsArray() {
   return [
     makeHiddenSafeSceneTool(),
-    ...TOOL_DEFS.map((def) => makePanelTool(def)),
+    ...CATEGORY_TOOL_DEFS.map((def) => makeCategoryTool(def)),
     makeResetTool()
   ];
 }
@@ -310,8 +139,8 @@ function makeFxbusToolsObject() {
     [SAFE_TOOL]: makeHiddenSafeSceneTool()
   };
 
-  for (const def of TOOL_DEFS) {
-    tools[def.name] = makePanelTool(def);
+  for (const def of CATEGORY_TOOL_DEFS) {
+    tools[def.name] = makeCategoryTool(def);
   }
 
   tools["fxbus-reset"] = makeResetTool();
@@ -359,10 +188,10 @@ export function registerFxBusSceneControls() {
    * Large comment:
    * Register exactly one FX Bus scene-control group.
    *
-   * This group is mostly passive:
-   * - normal FX buttons open the FX Bus panel
-   * - screen FX leave native selection alone
-   * - dedicated selection helper buttons explicitly activate native Token/Tiles select
+   * This group is passive:
+   * - category buttons open the FX Bus panel
+   * - detailed effect selection lives inside the panel
+   * - reset broadcasts fx.bus.reset
    * - a hidden safe active tool keeps Foundry control-state valid
    */
   const key = "__fxbusSceneControlsHookFn";
@@ -382,7 +211,8 @@ export function registerFxBusSceneControls() {
 
     removeControlsNamed(controls, [
       "fxbus-token",
-      "fxbus-tile"
+      "fxbus-tile",
+      ...OLD_TOOL_NAMES
     ]);
 
     addControlDefinition(
