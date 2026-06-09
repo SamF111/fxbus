@@ -29,21 +29,25 @@
  * - Does not create clones.
  * - Does not reparent tile render objects.
  * - Does not hide managed tile meshes.
- * - Animates only the local tile render object transform.
+ * - Animates only the local visible tile render object transform.
  * - Rebases when the TileDocument position, size, or rotation changes.
- * - Restores the original transform exactly on stop/reset.
+ * - Restores the original transform exactly on stop/reset where the target object
+ *   still exists.
  *
- * Reason:
- * - Cloning tiles outside Foundry's tile render environment breaks lighting,
- *   darkness, and scene environmental rendering.
- * - Cloning tiles inside Foundry's managed tile render tree can collide with
- *   tile refresh/control state during multi-tile selection.
- * - Direct local transform mutation preserves Foundry's normal tile rendering
- *   while remaining visual-only because no TileDocument data is changed.
+ * Composition:
+ * - If Tile Flow owns the visible representation, oscillate the Tile Flow container.
+ * - Otherwise oscillate the managed tile render object.
+ *
+ * Lifecycle safety:
+ * - Tile Flow may destroy its overlay while Tile Oscillation still has a reference
+ *   to it, especially during manual testing or poorly ordered reset.
+ * - This file must never write transforms to destroyed display objects.
+ * - If the visible object changes, Oscillation rebases onto the new live object.
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
 import { clamp, degToRad } from "../utils.js";
+import { getTileFlowVisualObject } from "./tileFlowFx.js";
 
 const EFFECT_NAME = "tileOscillation";
 
@@ -88,6 +92,38 @@ function getTileRenderObject(tile) {
   if (!tile) return null;
   if (tile.mesh) return tile.mesh;
   if (tile.tile) return tile.tile;
+
+  return null;
+}
+
+function isLiveDisplayObject(obj) {
+  /**
+   * Large comment:
+   * Determine whether a PIXI display object is still safe to mutate.
+   *
+   * A destroyed object may still be referenced by FX state, but PIXI can null
+   * internal transform fields. Writing x/y/rotation to that object can then throw.
+   */
+  if (!obj) return false;
+  if (obj.destroyed) return false;
+  if (!obj.transform) return false;
+
+  return true;
+}
+
+function getVisibleTileObject(runtime, tileId, tile) {
+  /**
+   * Large comment:
+   * Resolve the object that is currently visible for this tile.
+   *
+   * If Tile Flow is running or retained, the visible representation is Tile Flow's
+   * container. In that case, oscillation must target the container.
+   */
+  const flowObject = getTileFlowVisualObject(runtime, tileId);
+  if (isLiveDisplayObject(flowObject)) return flowObject;
+
+  const tileObject = getTileRenderObject(tile);
+  if (isLiveDisplayObject(tileObject)) return tileObject;
 
   return null;
 }
@@ -137,7 +173,7 @@ function snapshotTileTransform(obj) {
    *
    * This snapshot is local-only render state. It is not TileDocument data.
    */
-  if (!obj) return null;
+  if (!isLiveDisplayObject(obj)) return null;
 
   return {
     x: obj.x,
@@ -157,25 +193,33 @@ function restoreTileTransform(obj, snapshot) {
    * Large comment:
    * Restore the tile render object's transform exactly.
    *
-   * This is called by Stop and Reset through the stop handler. It does not call
-   * tile.refresh(), document.update(), control(), or release().
+   * This is deliberately defensive. If Tile Flow has already destroyed its
+   * overlay, old Oscillation state may still point at that destroyed container.
+   * In that case, do nothing instead of writing into a dead PIXI transform.
    */
-  if (!obj || !snapshot) return;
+  if (!isLiveDisplayObject(obj) || !snapshot) return false;
 
-  obj.x = snapshot.x;
-  obj.y = snapshot.y;
-  obj.rotation = snapshot.rotation;
+  try {
+    obj.x = snapshot.x;
+    obj.y = snapshot.y;
+    obj.rotation = snapshot.rotation;
 
-  if (obj.scale) {
-    obj.scale.set(snapshot.scaleX, snapshot.scaleY);
-  }
+    if (obj.scale) {
+      obj.scale.set(snapshot.scaleX, snapshot.scaleY);
+    }
 
-  if (obj.pivot) {
-    obj.pivot.set(snapshot.pivotX, snapshot.pivotY);
-  }
+    if (obj.pivot) {
+      obj.pivot.set(snapshot.pivotX, snapshot.pivotY);
+    }
 
-  if (obj.skew) {
-    obj.skew.set(snapshot.skewX ?? 0, snapshot.skewY ?? 0);
+    if (obj.skew) {
+      obj.skew.set(snapshot.skewX ?? 0, snapshot.skewY ?? 0);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("[FX Bus] Tile Osc: skipped transform restore for invalid display object.", err);
+    return false;
   }
 }
 
@@ -260,30 +304,30 @@ function applyDocumentDeltaToSnapshot(snapshot, previousDocumentState, currentDo
   };
 }
 
-function rebaseTileOscillationState(state) {
+function rebaseTileOscillationState(runtime, state) {
   /**
    * Large comment:
-   * Rebase oscillation after Foundry moves, resizes, rotates, or redraws the tile.
+   * Rebase oscillation after Foundry moves, resizes, rotates, redraws the tile,
+   * or Tile Flow takes over/releases the visible representation.
    *
-   * For a normal document movement, derive the new baseline from the document
-   * delta rather than reading from the render object. The render object is the
-   * thing being animated, so it may still be pinned to the previous FX baseline.
-   *
-   * If Foundry has replaced the render object entirely, restore the old object
-   * if possible and snapshot the new one.
+   * Important:
+   * - If the old object is destroyed, do not restore it.
+   * - If the new visible object is live, snapshot that new object and continue.
+   * - This allows bad stop order to recover rather than crashing the ticker.
    */
   const tile = getTileById(state.tileId);
-  const object = getTileRenderObject(tile);
+  const object = getVisibleTileObject(runtime, state.tileId, tile);
 
   if (!tile || !object) return false;
 
   const currentDocumentState = snapshotTileDocumentState(tile);
   if (!currentDocumentState) return false;
 
-  const objectChanged = state.object !== object || object.destroyed;
+  const previousObject = state.object;
+  const objectChanged = previousObject !== object || !isLiveDisplayObject(previousObject);
 
   if (objectChanged) {
-    restoreTileTransform(state.object, state.original);
+    restoreTileTransform(previousObject, state.original);
 
     const nextSnapshot = snapshotTileTransform(object);
     if (!nextSnapshot) return false;
@@ -319,7 +363,7 @@ function rebaseTileOscillationState(state) {
 function buildAppliedOffset(state, now) {
   /**
    * Large comment:
-   * Compute the current oscillation offset for the managed tile render object.
+   * Compute the current oscillation offset for the visible tile object.
    */
   const t = (now - state.startedAt) / 1000;
 
@@ -337,7 +381,7 @@ function buildAppliedOffset(state, now) {
 function applyTileTransform(state, applied) {
   /**
    * Large comment:
-   * Apply visual-only oscillation directly to the local tile render object.
+   * Apply visual-only oscillation directly to the local visible tile object.
    *
    * This does not mutate the TileDocument. It only changes the current client's
    * render object until Stop/Reset restores the snapshot.
@@ -345,51 +389,70 @@ function applyTileTransform(state, applied) {
   const obj = state?.object;
   const base = state?.base;
 
-  if (!obj || !base) return;
+  if (!isLiveDisplayObject(obj) || !base) return false;
 
-  obj.x = base.x + applied.x;
-  obj.y = base.y + applied.y;
-  obj.rotation = base.rotation + applied.rotation;
+  try {
+    obj.x = base.x + applied.x;
+    obj.y = base.y + applied.y;
+    obj.rotation = base.rotation + applied.rotation;
 
-  if (obj.scale) {
-    obj.scale.set(
-      base.scaleX * applied.scaleMul,
-      base.scaleY * applied.scaleMul
-    );
-  }
+    if (obj.scale) {
+      obj.scale.set(
+        base.scaleX * applied.scaleMul,
+        base.scaleY * applied.scaleMul
+      );
+    }
 
-  if (obj.pivot) {
-    obj.pivot.set(base.pivotX, base.pivotY);
-  }
+    if (obj.pivot) {
+      obj.pivot.set(base.pivotX, base.pivotY);
+    }
 
-  if (obj.skew) {
-    obj.skew.set(base.skewX ?? 0, base.skewY ?? 0);
+    if (obj.skew) {
+      obj.skew.set(base.skewX ?? 0, base.skewY ?? 0);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("[FX Bus] Tile Osc: failed to apply transform to display object.", err);
+    return false;
   }
 }
 
-function ensureStateStillValid(tileId, state) {
+function ensureStateStillValid(runtime, tileId, state) {
   /**
    * Large comment:
-   * Confirm the stored tile render object still matches the current tile and
-   * rebase when the TileDocument position, size, or rotation changes.
-   *
-   * Movement must be detected from TileDocument state, not render-object state,
-   * because the render object is actively being animated by this ticker.
+   * Confirm the stored visible render object still matches the current tile and
+   * rebase when the TileDocument position, size, rotation, or visible owner changes.
    */
   const tile = getTileById(tileId);
-  const currentObject = getTileRenderObject(tile);
+  const currentObject = getVisibleTileObject(runtime, tileId, tile);
 
   if (!tile || !currentObject) return false;
 
   const currentDocumentState = snapshotTileDocumentState(tile);
   if (!currentDocumentState) return false;
 
-  const objectChanged = state.object !== currentObject || currentObject.destroyed;
+  const objectChanged = state.object !== currentObject || !isLiveDisplayObject(state.object);
   const documentChanged = !sameTileDocumentState(state.documentState, currentDocumentState);
 
   if (!objectChanged && !documentChanged) return true;
 
-  return rebaseTileOscillationState(state);
+  return rebaseTileOscillationState(runtime, state);
+}
+
+function removeState(runtime, tileId, state, restore = true) {
+  /**
+   * Large comment:
+   * Remove one oscillation state safely.
+   *
+   * restore=true is used for ordinary stop/reset. Restore is skipped automatically
+   * if the target display object has already been destroyed by another effect.
+   */
+  if (restore) {
+    restoreTileTransform(state?.object, state?.original);
+  }
+
+  getTileMap(runtime).delete(tileId);
 }
 
 function ensureTileTicker(runtime) {
@@ -403,15 +466,20 @@ function ensureTileTicker(runtime) {
   ensureTicker(runtime, EFFECT_NAME, (_deltaMS) => {
     const now = performance.now();
 
-    for (const [tileId, state] of map.entries()) {
-      if (!ensureStateStillValid(tileId, state)) {
-        restoreTileTransform(state.object, state.original);
-        map.delete(tileId);
+    for (const [tileId, state] of Array.from(map.entries())) {
+      if (!ensureStateStillValid(runtime, tileId, state)) {
+        removeState(runtime, tileId, state, true);
         continue;
       }
 
       const applied = buildAppliedOffset(state, now);
-      applyTileTransform(state, applied);
+      const appliedOk = applyTileTransform(state, applied);
+
+      if (!appliedOk) {
+        removeState(runtime, tileId, state, true);
+        continue;
+      }
+
       state.applied = applied;
     }
 
@@ -421,14 +489,16 @@ function ensureTileTicker(runtime) {
   });
 }
 
-function updateExistingState(state, params) {
+function updateExistingState(runtime, tileId, state, params) {
   /**
    * Large comment:
-   * Update live oscillation parameters without replacing the snapshot.
+   * Update live oscillation parameters.
    *
-   * Existing phase and start time are preserved unless randomPhase is explicitly
-   * disabled.
+   * If the visible target has changed since the previous tick, rebase before
+   * accepting the update so new parameters apply to the current visual object.
    */
+  ensureStateStillValid(runtime, tileId, state);
+
   state.rotationRad = params.rotationRad;
   state.swayPx = params.swayPx;
   state.bobPx = params.bobPx;
@@ -447,17 +517,17 @@ function startOrUpdate(runtime, payload) {
 
   for (const tileId of tileIds) {
     const tile = getTileById(tileId);
-    const object = getTileRenderObject(tile);
+    const object = getVisibleTileObject(runtime, tileId, tile);
 
     if (!tile || !object) {
-      console.warn("[FX Bus] Tile Osc: tile not found or has no render object.", { tileId });
+      console.warn("[FX Bus] Tile Osc: tile not found or has no visible render object.", { tileId });
       continue;
     }
 
     const existing = map.get(tileId);
 
     if (existing) {
-      updateExistingState(existing, params);
+      updateExistingState(runtime, tileId, existing, params);
       continue;
     }
 
@@ -513,8 +583,7 @@ function stop(runtime, payload) {
     const state = map.get(tileId);
     if (!state) continue;
 
-    restoreTileTransform(state.object, state.original);
-    map.delete(tileId);
+    removeState(runtime, tileId, state, true);
   }
 
   if (map.size === 0) {

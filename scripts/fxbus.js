@@ -11,11 +11,17 @@
  *
  * Toolbar injection:
  * - Uses getSceneControlButtons during UI controls construction.
- * - Registers the hook on init (setup would also work).
- * - Does not force a controls re-render (avoids cross-module control-state races).
+ * - Registers the hook on init.
+ * - Does not force a controls re-render, avoiding cross-module control-state races.
+ *
+ * Toolbar model:
+ * - FX Bus controls are contextual launchers.
+ * - FX Bus does not register or enter a custom canvas layer.
+ * - The standalone FX Bus toolbar icon preserves the current native Foundry
+ *   control and opens the matching FX Bus panel category.
  *
  * Provenance:
- * - emit() enriches outgoing payloads with __fxbus sender metadata (userId, userName, isGM, ts).
+ * - emit() enriches outgoing payloads with __fxbus sender metadata.
  * - Handlers receive the enriched payload.
  * - Broadcast uses the enriched payload so receivers can log sender identity.
  */
@@ -27,25 +33,131 @@ import { registerFxBusSceneControls } from "./ui/controls.js";
 const RUNTIME_KEY = "fxbus";
 
 function getModule() {
-  /** Large comment:
+  /**
+   * Large comment:
    * Resolve module metadata from Foundry's loaded module registry.
-   * This is the single source of truth for id/version/title/etc. (module.json).
-   * Never hardcode version strings in runtime code.
+   *
+   * This is the single source of truth for id, version, title, and related
+   * module metadata from module.json. Runtime code should not hard-code version
+   * strings or duplicate module metadata.
    */
   const mod = game.modules.get(RUNTIME_KEY);
-  if (!mod) throw new Error(`[FX Bus] Module "${RUNTIME_KEY}" not found in game.modules.`);
+
+  if (!mod) {
+    throw new Error(`[FX Bus] Module "${RUNTIME_KEY}" not found in game.modules.`);
+  }
+
   return mod;
 }
 
-function getOrCreateRuntime() {
-  /** Large comment:
-   * Create the shared runtime once and expose it at globalThis.fxbus.
-   * emit() always:
-   * - applies locally if a handler exists
-   * - broadcasts to other clients via game.socket
+function buildSenderMetadata() {
+  /**
+   * Large comment:
+   * Build provenance metadata for every locally emitted FX Bus payload.
    *
-   * emit() also:
-   * - enriches payloads with sender metadata under __fxbus
+   * This stays under __fxbus so effect payload fields remain clean and existing
+   * macros do not need to know about sender bookkeeping.
+   */
+  return {
+    userId: game.userId,
+    userName: game.user?.name,
+    isGM: game.user?.isGM === true,
+    ts: Date.now()
+  };
+}
+
+function logEmit(runtime, action, enriched) {
+  /**
+   * Large comment:
+   * Log outbound effect requests with enough context to diagnose socket and
+   * macro behaviour, while remaining tolerant of odd console/object states.
+   */
+  try {
+    console.log("[FX Bus] emit", {
+      action,
+      from: enriched.__fxbus,
+      payload: { ...enriched },
+      socket: runtime.socketName
+    });
+  } catch {
+    console.log("[FX Bus] emit", action);
+  }
+}
+
+function handleLocalPayload(runtime, action, enriched, t0) {
+  /**
+   * Large comment:
+   * Apply an emitted payload locally before broadcasting it to other clients.
+   *
+   * This keeps the GM/client that triggered the effect visually in sync with
+   * all socket receivers and avoids needing to wait for a loopback socket event.
+   */
+  const handler = runtime.handlers.get(action);
+
+  if (typeof handler !== "function") {
+    console.warn("[FX Bus] no handler", {
+      action,
+      from: enriched.__fxbus
+    });
+    return;
+  }
+
+  try {
+    handler(enriched);
+
+    const dt = Math.round((performance.now() - t0) * 1000) / 1000;
+
+    console.log("[FX Bus] handled", {
+      action,
+      ms: dt,
+      from: enriched.__fxbus
+    });
+  } catch (err) {
+    console.error("[FX Bus] handler error", {
+      action,
+      err,
+      from: enriched.__fxbus
+    });
+  }
+}
+
+function broadcastPayload(runtime, action, enriched) {
+  /**
+   * Large comment:
+   * Broadcast an enriched FX Bus payload to other connected clients.
+   *
+   * The socket layer is intentionally thin: it receives the same enriched
+   * payload shape that was handled locally.
+   */
+  try {
+    game.socket.emit(runtime.socketName, enriched);
+
+    console.log("[FX Bus] broadcast", {
+      action,
+      from: enriched.__fxbus
+    });
+  } catch (err) {
+    console.error("[FX Bus] socket emit failed", {
+      action,
+      err,
+      from: enriched.__fxbus
+    });
+  }
+}
+
+function getOrCreateRuntime() {
+  /**
+   * Large comment:
+   * Create the shared FX Bus runtime once and expose it at globalThis.fxbus.
+   *
+   * Runtime responsibilities:
+   * - Store per-effect local state maps.
+   * - Store registered action handlers.
+   * - Store active PIXI tickers.
+   * - Provide emit(), which applies locally and then broadcasts.
+   *
+   * emit() always enriches payloads with sender metadata under __fxbus before
+   * local handling and socket broadcast.
    */
   if (globalThis[RUNTIME_KEY]) return globalThis[RUNTIME_KEY];
 
@@ -66,50 +178,19 @@ function getOrCreateRuntime() {
 
     emit(payload) {
       const action = payload?.action;
-      if (typeof action !== "string") return;
+      if (typeof action !== "string" || action.trim().length === 0) return;
 
       const t0 = performance.now();
 
       const enriched = {
         ...payload,
-        __fxbus: {
-          userId: game.userId,
-          userName: game.user?.name,
-          isGM: game.user?.isGM === true,
-          ts: Date.now()
-        }
+        action,
+        __fxbus: buildSenderMetadata()
       };
 
-      try {
-        console.log("[FX Bus] emit", {
-          action,
-          from: enriched.__fxbus,
-          payload: { ...enriched },
-          socket: runtime.socketName
-        });
-      } catch {
-        console.log("[FX Bus] emit", action);
-      }
-
-      const handler = runtime.handlers.get(action);
-      if (typeof handler === "function") {
-        try {
-          handler(enriched);
-          const dt = Math.round((performance.now() - t0) * 1000) / 1000;
-          console.log("[FX Bus] handled", { action, ms: dt, from: enriched.__fxbus });
-        } catch (err) {
-          console.error("[FX Bus] handler error", { action, err, from: enriched.__fxbus });
-        }
-      } else {
-        console.warn("[FX Bus] no handler", { action, from: enriched.__fxbus });
-      }
-
-      try {
-        game.socket.emit(runtime.socketName, enriched);
-        console.log("[FX Bus] broadcast", { action, from: enriched.__fxbus });
-      } catch (err) {
-        console.error("[FX Bus] socket emit failed", { action, err, from: enriched.__fxbus });
-      }
+      logEmit(runtime, action, enriched);
+      handleLocalPayload(runtime, action, enriched, t0);
+      broadcastPayload(runtime, action, enriched);
     }
   };
 
@@ -133,6 +214,8 @@ Hooks.once("init", () => {
   });
 
   registerFxBusSceneControls();
+
+  console.log(`[FX Bus] Init | v${runtime.version}`);
 });
 
 /* -------------------------------------------- */

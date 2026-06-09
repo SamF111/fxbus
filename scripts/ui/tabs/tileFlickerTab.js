@@ -15,6 +15,7 @@
  *
  * Copy Macro:
  * - buildApplyPayload(root, runtime) returns the same payload used by Apply.
+ * - Static macro copying requires selected tiles, because tileIds are baked into the payload.
  */
 
 import {
@@ -41,14 +42,80 @@ function selectValue(panel, name, fallback) {
   return value.length > 0 ? value : fallback;
 }
 
-function tileIdsOrWarn() {
+function getSelectedTileIdsOrThrow() {
+  /**
+   * Large comment:
+   * Resolve the currently selected tile ids for static payload construction.
+   *
+   * Tile Flicker macros are intentionally static. Copy Macro must therefore bake
+   * the selected tile ids into the generated payload. If no tiles are selected,
+   * this is a validation error rather than a silent empty-target macro.
+   */
   const tileIds = selectedTileIds();
 
   if (tileIds.length === 0) {
-    ui.notifications.warn("FX Bus: select one or more tiles for Tile Flicker.");
+    throw new Error("Tile Flicker: no tiles selected");
   }
 
   return tileIds;
+}
+
+function getSelectedTileIdsOrWarn() {
+  /**
+   * Large comment:
+   * Resolve selected tile ids for live Apply / Stop Selected button actions.
+   *
+   * Button actions should warn and stop without throwing because these are normal
+   * user interactions rather than macro-build validation paths.
+   */
+  try {
+    return getSelectedTileIdsOrThrow();
+  } catch (err) {
+    ui.notifications.warn(`FX Bus: ${err?.message ?? "select one or more tiles"}`);
+    return [];
+  }
+}
+
+function buildPayload(panel, tileIds) {
+  /**
+   * Large comment:
+   * Build the shared Tile Flicker start payload.
+   *
+   * This helper is used by both Apply and Copy Macro, so those two workflows
+   * stay mechanically identical. The caller is responsible for deciding how tile
+   * selection validation is surfaced.
+   */
+  return {
+    action: "fx.tileFlicker.start",
+    tileIds,
+    minAlpha: num(
+      panel.querySelector('input[name="tileFlickerMinAlpha"]')?.value,
+      0.35
+    ),
+    maxAlpha: num(
+      panel.querySelector('input[name="tileFlickerMaxAlpha"]')?.value,
+      1.0
+    ),
+    freqHz: num(
+      panel.querySelector('input[name="tileFlickerFreqHz"]')?.value,
+      8
+    ),
+    jitter: num(
+      panel.querySelector('input[name="tileFlickerJitter"]')?.value,
+      0.25
+    ),
+    randomPhase: checked(panel, "tileFlickerRandomPhase", true),
+    useTint: checked(panel, "tileFlickerUseTint", false),
+    tint: normaliseHex(
+      panel.querySelector('input[name="tileFlickerTint"]')?.value,
+      "#ffffff"
+    ),
+    blendMode: selectValue(panel, "tileFlickerBlendMode", "NORMAL"),
+    foregroundFadeAlpha: num(
+      panel.querySelector('input[name="tileFlickerForegroundFadeAlpha"]')?.value,
+      0.25
+    )
+  };
 }
 
 export function tileFlickerTabDef() {
@@ -69,39 +136,9 @@ export function tileFlickerTabDef() {
       );
       if (!panel) throw new Error("Tile Flicker: panel not found");
 
-      const tileIds = selectedTileIds();
+      const tileIds = getSelectedTileIdsOrThrow();
 
-      return {
-        action: "fx.tileFlicker.start",
-        tileIds,
-        minAlpha: num(
-          panel.querySelector('input[name="tileFlickerMinAlpha"]')?.value,
-          0.35
-        ),
-        maxAlpha: num(
-          panel.querySelector('input[name="tileFlickerMaxAlpha"]')?.value,
-          1.0
-        ),
-        freqHz: num(
-          panel.querySelector('input[name="tileFlickerFreqHz"]')?.value,
-          8
-        ),
-        jitter: num(
-          panel.querySelector('input[name="tileFlickerJitter"]')?.value,
-          0.25
-        ),
-        randomPhase: checked(panel, "tileFlickerRandomPhase", true),
-        useTint: checked(panel, "tileFlickerUseTint", false),
-        tint: normaliseHex(
-          panel.querySelector('input[name="tileFlickerTint"]')?.value,
-          "#ffffff"
-        ),
-        blendMode: selectValue(panel, "tileFlickerBlendMode", "NORMAL"),
-        foregroundFadeAlpha: num(
-          panel.querySelector('input[name="tileFlickerForegroundFadeAlpha"]')?.value,
-          0.25
-        )
-      };
+      return buildPayload(panel, tileIds);
     },
 
     wire(root, runtime) {
@@ -118,17 +155,16 @@ export function tileFlickerTabDef() {
       );
 
       function apply() {
-        const tileIds = tileIdsOrWarn();
+        const tileIds = getSelectedTileIdsOrWarn();
         if (tileIds.length === 0) return;
 
-        const payload = this.buildApplyPayload(root, runtime);
-        payload.tileIds = tileIds;
+        const payload = buildPayload(panel, tileIds);
 
         runtime.emit(payload);
       }
 
       function stopSelected() {
-        const tileIds = tileIdsOrWarn();
+        const tileIds = getSelectedTileIdsOrWarn();
         if (tileIds.length === 0) return;
 
         runtime.emit({

@@ -1,5 +1,11 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tileFlickerTab.hbs --}}
 
+<p class="fxbus-muted">
+  Requires selected tiles. Apply starts if not running, otherwise updates.
+</p>
+
+<hr class="fxbus-divider"/>
+
 <div class="fxbus-grid-2">
   <div class="form-group">
     <label>Min alpha</label>
@@ -120,28 +126,25 @@
 <div class="fxbus-row">
   <button
     type="button"
+    class="fxbus-do"
     data-action="tileFlickerApply"
   >Apply</button>
 
   <button
     type="button"
+    class="fxbus-do fxbus-smallbtn"
     data-action="tileFlickerStopSelected"
-    class="fxbus-smallbtn"
   >Stop Selected</button>
 
   <button
     type="button"
+    class="fxbus-do fxbus-smallbtn"
     data-action="tileFlickerStopAll"
-    class="fxbus-smallbtn"
   >Stop All</button>
 
   <button
     type="button"
+    class="fxbus-do fxbus-smallbtn"
     data-action="fxbusCopyToMacro"
-    class="fxbus-smallbtn"
   >Copy Macro</button>
 </div>
-
-<p class="fxbus-muted">
-  Applies visual-only flicker to selected tiles. No tile documents are changed.
-</p>

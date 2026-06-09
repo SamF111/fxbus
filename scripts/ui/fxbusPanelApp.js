@@ -43,6 +43,7 @@ import { tokenLaserTabDef } from "./tabs/tokenLaserTab.js";
 import { tokenRecoilTabDef } from "./tabs/tokenRecoilTab.js";
 import { tileOscTabDef } from "./tabs/tileOscTab.js";
 import { tileFlickerTabDef } from "./tabs/tileFlickerTab.js";
+import { tileFlowTabDef } from "./tabs/tileFlowTab.js";
 import { screenShakeTabDef } from "./tabs/screenShakeTab.js";
 import { screenRotateTabDef } from "./tabs/screenRotateTab.js";
 import { screenPulseTabDef } from "./tabs/screenPulseTab.js";
@@ -72,6 +73,7 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileFlickerTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tileFlowTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenRotateTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
@@ -90,6 +92,38 @@ let TEMPLATES_PRELOADED = false;
 function templatePathToPartialName(path) {
   const file = String(path).split("/").pop() ?? "";
   return file.replace(/\.hbs$/i, "");
+}
+
+function errorMessageForNotification(err, fallback) {
+  /**
+   * Large comment:
+   * Convert thrown tab validation/build errors into a useful user-facing message.
+   *
+   * The tab remains responsible for throwing meaningful validation errors, for
+   * example "TokenOsc: no tokens selected". The panel stays generic and displays
+   * the message rather than maintaining per-effect if/else notification logic.
+   */
+  const message = String(err?.message ?? "").trim();
+  return message.length ? `FX Bus: ${message}` : fallback;
+}
+
+function logPanelBuildError(prefix, app, tabDef, err, extra = {}) {
+  /**
+   * Large comment:
+   * Keep structured console diagnostics for developers while the notification
+   * shows the meaningful thrown error to the GM.
+   */
+  console.error(prefix, {
+    tab: tabDef?.id,
+    label: tabDef?.label,
+    activeCategory: app?._activeCategory,
+    activeTab: app?._activeTab,
+    errorName: err?.name,
+    errorMessage: err?.message,
+    errorStack: err?.stack,
+    err,
+    ...extra
+  });
 }
 
 async function preloadFxBusTemplates() {
@@ -153,6 +187,7 @@ function buildGroups() {
 
   const tileOsc = tileOscTabDef();
   const tileFlicker = tileFlickerTabDef();
+  const tileFlow = tileFlowTabDef();
 
   const screenShake = screenShakeTabDef();
   const screenPulse = screenPulseTabDef();
@@ -181,7 +216,8 @@ function buildGroups() {
       label: "Tile",
       tabs: [
         tileOsc,
-        tileFlicker
+        tileFlicker,
+        tileFlow
       ]
     },
     {
@@ -916,17 +952,25 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
         timeTag
       });
     } catch (err) {
-      ui.notifications.error("FX Bus: failed to build custom macro. See console.");
-      console.error("[FX Bus] buildMacroSource failed", { tab: tabDef.id, err });
+      ui.notifications.warn(
+        errorMessageForNotification(err, "FX Bus: failed to build custom macro.")
+      );
+
+      logPanelBuildError("[FX Bus] buildMacroSource failed", app, tabDef, err);
       return;
     }
 
     if (typeof macroSource !== "string" || macroSource.trim().length === 0) {
       ui.notifications.error("FX Bus: invalid custom macro source.");
+
       console.error("[FX Bus] Invalid macro source returned", {
-        tab: tabDef.id,
+        tab: tabDef?.id,
+        label: tabDef?.label,
+        activeCategory: app?._activeCategory,
+        activeTab: app?._activeTab,
         macroSource
       });
+
       return;
     }
   } else {
@@ -936,7 +980,15 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
       ui.notifications.error(
         `FX Bus: tab '${tabDef.id}' does not support Copy to Macro yet.`
       );
-      console.error("[FX Bus] Missing buildApplyPayload on tabDef", tabDef);
+
+      console.error("[FX Bus] Missing buildApplyPayload on tabDef", {
+        tab: tabDef?.id,
+        label: tabDef?.label,
+        activeCategory: app?._activeCategory,
+        activeTab: app?._activeTab,
+        tabDef
+      });
+
       return;
     }
 
@@ -945,17 +997,25 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
     try {
       payload = builder(root, runtime);
     } catch (err) {
-      ui.notifications.error("FX Bus: failed to build macro payload. See console.");
-      console.error("[FX Bus] buildApplyPayload failed", { tab: tabDef.id, err });
+      ui.notifications.warn(
+        errorMessageForNotification(err, "FX Bus: failed to build macro payload.")
+      );
+
+      logPanelBuildError("[FX Bus] buildApplyPayload failed", app, tabDef, err);
       return;
     }
 
     if (!payload || typeof payload !== "object") {
       ui.notifications.error("FX Bus: invalid macro payload.");
+
       console.error("[FX Bus] Invalid payload returned", {
-        tab: tabDef.id,
+        tab: tabDef?.id,
+        label: tabDef?.label,
+        activeCategory: app?._activeCategory,
+        activeTab: app?._activeTab,
         payload
       });
+
       return;
     }
 
@@ -970,7 +1030,15 @@ async function copyActiveTabApplyToClipboard(app, root, runtime) {
     ui.notifications.info("FX Bus: macro copied to clipboard.");
   } catch (err) {
     ui.notifications.error("FX Bus: clipboard copy blocked. See console.");
-    console.error("[FX Bus] Clipboard copy failed", err);
+
+    console.error("[FX Bus] Clipboard copy failed", {
+      activeCategory: app?._activeCategory,
+      activeTab: app?._activeTab,
+      errorName: err?.name,
+      errorMessage: err?.message,
+      errorStack: err?.stack,
+      err
+    });
   }
 }
 
@@ -1080,7 +1148,16 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
       try {
         t.wire(root, runtime);
       } catch (err) {
-        console.error("[FX Bus] tab wire failed", { tab: t.id, err });
+        console.error("[FX Bus] tab wire failed", {
+          tab: t?.id,
+          label: t?.label,
+          activeCategory: this?._activeCategory,
+          activeTab: this?._activeTab,
+          errorName: err?.name,
+          errorMessage: err?.message,
+          errorStack: err?.stack,
+          err
+        });
       }
     }
 
@@ -1100,6 +1177,9 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     activateCategorySelectionMode(this._activeCategory).catch((err) => {
       console.warn("[FX Bus] Initial category selection-layer activation failed.", {
         categoryId: this._activeCategory,
+        errorName: err?.name,
+        errorMessage: err?.message,
+        errorStack: err?.stack,
         err
       });
     });

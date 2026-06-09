@@ -74,6 +74,15 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileFlow'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileFlow"
+        >
+          {{> "modules/fxbus/templates/tabs/tileFlowTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'shake'))}}active{{/if}}"
           data-group="fxbus"
           data-category="screen"

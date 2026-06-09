@@ -21,6 +21,7 @@ import { registerScreenRotateFx } from "./screenRotateFx.js";
 
 import { registerTileOscillationFx } from "./tileOscillationFx.js";
 import { registerTileFlickerFx } from "./tileFlickerFx.js";
+import { registerTileFlowFx } from "./tileFlowFx.js";
 
 import { registerFxbusResetFx } from "./fxbusResetFx.js";
 
@@ -42,6 +43,7 @@ export function registerBuiltInEffects(runtime) {
 
   registerTileOscillationFx(runtime);
   registerTileFlickerFx(runtime);
+  registerTileFlowFx(runtime);
 
   registerFxbusResetFx(runtime);
 }

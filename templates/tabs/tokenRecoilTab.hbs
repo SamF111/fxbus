@@ -1,5 +1,11 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tokenRecoilTab.hbs --}}
 
+<p class="fxbus-muted">
+  Visual-only token recoil. Pick an origin for blasts, or use the first selected token for caster-origin shockwaves.
+</p>
+
+<hr class="fxbus-divider" />
+
 <div class="fxbus-grid-2">
   <div class="form-group">
     <label>Origin X</label>
@@ -37,11 +43,11 @@
 </div>
 
 <div class="fxbus-row">
-  <button type="button" data-action="recoilPickOriginOnCanvas">
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="recoilPickOriginOnCanvas">
     Pick Origin on Canvas
   </button>
 
-  <button type="button" data-action="recoilSetOriginFromSelected">
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="recoilSetOriginFromSelected">
     Set Origin from Selected
   </button>
 </div>
@@ -144,45 +150,31 @@
   </div>
 </div>
 
-<div class="form-group">
-  <label>Rotation Kick (deg)</label>
-  <input
-    type="number"
-    name="recoilRotationDeg"
-    value="0"
-    step="0.5"
-    min="-45"
-    max="45"
-  />
-</div>
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Rotation Kick (deg)</label>
+    <input
+      type="number"
+      name="recoilRotationDeg"
+      value="0"
+      step="0.5"
+      min="-45"
+      max="45"
+    />
+  </div>
 
-<div class="form-group">
-  <label class="fxbus-inline">
-    <input type="checkbox" name="recoilIncludeHidden" />
-    Include hidden tokens
-  </label>
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="recoilIncludeHidden" />
+      Include hidden tokens
+    </label>
+  </div>
 </div>
 
 <hr class="fxbus-divider" />
 
 <div class="fxbus-row">
-  <button type="button" data-action="recoilStart">Start</button>
-  <button type="button" data-action="recoilStop" class="fxbus-smallbtn">Stop</button>
-  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+  <button type="button" class="fxbus-do" data-action="recoilStart">Start</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="recoilStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>
-
-<p class="fxbus-muted">
-  Recoil is visual-only. It offsets token artwork by pivot and restores it after the burst.
-</p>
-
-<p class="fxbus-muted">
-  Use Pick Origin on Canvas for explosions, fireballs, grenades, room-centre blasts, and other point-origin effects.
-</p>
-
-<p class="fxbus-muted">
-  Use first selected token as origin for caster-origin effects such as shockwaves, stomps, pulses, and thunderous bursts.
-</p>
-
-<p class="fxbus-muted">
-  For blast-source tokens, keep “Exclude selected token(s)” enabled so the origin token does not recoil from its own centre.
-</p>

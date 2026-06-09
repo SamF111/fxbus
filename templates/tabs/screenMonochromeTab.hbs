@@ -1,3 +1,11 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenMonochromeTab.hbs --}}
+
+<p class="fxbus-muted">
+  Applies a visual-only noir-style monochrome filter to all clients. Use duration 0 with Run until stopped for persistent scenes.
+</p>
+
+<hr class="fxbus-divider"/>
+
 <div class="fxbus-grid-2">
   <div class="form-group">
     <label>Contrast</label>
@@ -24,16 +32,25 @@
   </div>
 </div>
 
-<div class="form-group">
-  <label>Strength</label>
-  <input
-    type="number"
-    name="monoAlpha"
-    value="1.0"
-    step="0.05"
-    min="0"
-    max="1"
-  />
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Strength (0-1)</label>
+    <input
+      type="number"
+      name="monoAlpha"
+      value="1.0"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="monoUntilStopped"/>
+      Run until stopped
+    </label>
+  </div>
 </div>
 
 <div class="fxbus-grid-2">
@@ -63,13 +80,6 @@
 </div>
 
 <div class="form-group">
-  <label class="fxbus-inline">
-    <input type="checkbox" name="monoUntilStopped"/>
-    Run until stopped
-  </label>
-</div>
-
-<div class="form-group">
   <label>Duration (ms)</label>
   <input
     type="number"
@@ -84,12 +94,8 @@
 <hr class="fxbus-divider"/>
 
 <div class="fxbus-row">
-  <button type="button" data-action="monoStart">Start</button>
-  <button type="button" data-action="monoUpdate" class="fxbus-smallbtn">Update</button>
-  <button type="button" data-action="monoStop" class="fxbus-smallbtn">Stop</button>
-  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+  <button type="button" class="fxbus-do" data-action="monoStart">Start</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="monoUpdate">Update</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="monoStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>
-
-<p class="fxbus-muted">
-  Applies a noir-style monochrome filter to all clients.
-</p>

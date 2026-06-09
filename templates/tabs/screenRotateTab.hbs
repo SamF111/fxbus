@@ -1,3 +1,11 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenRotateTab.hbs --}}
+
+<p class="fxbus-muted">
+  Visual-only canvas roll. Use for disorientation, ship movement, impacts, dream logic, unstable rooms, or cinematic scene shifts.
+</p>
+
+<hr class="fxbus-divider"/>
+
 <div class="fxbus-grid-2">
   <div class="form-group">
     <label>Angle (deg)</label>
@@ -63,11 +71,7 @@
 <hr class="fxbus-divider"/>
 
 <div class="fxbus-row">
-  <button type="button" data-action="rotateStart">Start</button>
-  <button type="button" data-action="rotateStop" class="fxbus-smallbtn">Stop</button>
-  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+  <button type="button" class="fxbus-do" data-action="rotateStart">Start</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="rotateStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>
-
-<p class="fxbus-muted">
-  Wobble returns to the starting angle. Wobble Hold disorientates first, then settles at the new additive angle.
-</p>
