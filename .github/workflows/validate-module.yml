@@ -149,45 +149,47 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 <<'PY'
-import pathlib
-import re
-import sys
+          cat > /tmp/check-js-imports.py <<'PY'
+          import pathlib
+          import re
+          import sys
 
-root = pathlib.Path(".").resolve()
-scripts = root / "scripts"
+          root = pathlib.Path(".").resolve()
+          scripts = root / "scripts"
 
-import_pattern = re.compile(
-    r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
-)
+          import_pattern = re.compile(
+              r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
+          )
 
-ok = True
+          ok = True
 
-for path in sorted(scripts.rglob("*.js")):
-    text = path.read_text(encoding="utf-8")
+          for path in sorted(scripts.rglob("*.js")):
+              text = path.read_text(encoding="utf-8")
 
-    for match in import_pattern.finditer(text):
-        specifier = match.group(1)
+              for match in import_pattern.finditer(text):
+                  specifier = match.group(1)
 
-        if not specifier.startswith("."):
-            continue
+                  if not specifier.startswith("."):
+                      continue
 
-        target = (path.parent / specifier).resolve()
+                  target = (path.parent / specifier).resolve()
 
-        candidates = [
-            target,
-            target.with_suffix(".js") if target.suffix == "" else target,
-            target / "index.js",
-        ]
+                  candidates = [
+                      target,
+                      target.with_suffix(".js") if target.suffix == "" else target,
+                      target / "index.js",
+                  ]
 
-        if not any(candidate.exists() for candidate in candidates):
-            rel_path = path.relative_to(root)
-            print(f"::error file={rel_path}::Missing local import target: {specifier}")
-            ok = False
+                  if not any(candidate.exists() for candidate in candidates):
+                      rel_path = path.relative_to(root)
+                      print(f"::error file={rel_path}::Missing local import target: {specifier}")
+                      ok = False
 
-if not ok:
-    sys.exit(1)
-PY
+          if not ok:
+              sys.exit(1)
+          PY
+
+          python3 /tmp/check-js-imports.py
 
       - name: Validate Handlebars templates
         shell: bash
@@ -215,37 +217,39 @@ PY
         run: |
           set -euo pipefail
 
-          python3 <<'PY'
-import pathlib
-import re
-import sys
+          cat > /tmp/check-hbs-partials.py <<'PY'
+          import pathlib
+          import re
+          import sys
 
-root = pathlib.Path(".").resolve()
-templates = root / "templates"
+          root = pathlib.Path(".").resolve()
+          templates = root / "templates"
 
-partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
+          partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
 
-ok = True
+          ok = True
 
-for path in sorted(templates.rglob("*.hbs")):
-    text = path.read_text(encoding="utf-8")
+          for path in sorted(templates.rglob("*.hbs")):
+              text = path.read_text(encoding="utf-8")
 
-    for match in partial_pattern.finditer(text):
-        partial = match.group(1)
+              for match in partial_pattern.finditer(text):
+                  partial = match.group(1)
 
-        if partial.startswith("modules/fxbus/"):
-            target = root / partial.removeprefix("modules/fxbus/")
-        else:
-            target = path.parent / partial
+                  if partial.startswith("modules/fxbus/"):
+                      target = root / partial.removeprefix("modules/fxbus/")
+                  else:
+                      target = path.parent / partial
 
-        if not target.exists():
-            rel_path = path.relative_to(root)
-            print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
-            ok = False
+                  if not target.exists():
+                      rel_path = path.relative_to(root)
+                      print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
+                      ok = False
 
-if not ok:
-    sys.exit(1)
-PY
+          if not ok:
+              sys.exit(1)
+          PY
+
+          python3 /tmp/check-hbs-partials.py
 
       - name: Validate expected folders exist
         shell: bash
