@@ -36,6 +36,11 @@
  * - data-action="recoilStart"
  * - data-action="recoilStop"
  * - data-action="fxbusCopyToMacro"
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
+ * - Canvas origin picking is explicitly cancelled if this render's signal aborts.
  */
 
 import { num, setDisabled, selectedTokenIds } from "./shared/panelUtils.js";
@@ -62,6 +67,7 @@ function getSelectedOrigin() {
 function setInputValue(panel, name, value) {
   const el = panel?.querySelector?.(`[name="${name}"]`);
   if (!el) return;
+
   el.value = String(value);
   el.dispatchEvent(new Event("input", { bubbles: true }));
   el.dispatchEvent(new Event("change", { bubbles: true }));
@@ -70,6 +76,7 @@ function setInputValue(panel, name, value) {
 function setCheckboxValue(panel, name, value) {
   const el = panel?.querySelector?.(`input[name="${name}"]`);
   if (!el) return;
+
   el.checked = Boolean(value);
   el.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -77,12 +84,14 @@ function setCheckboxValue(panel, name, value) {
 function getCheckbox(panel, name, fallback = false) {
   const el = panel?.querySelector?.(`input[name="${name}"]`);
   if (!el) return fallback;
+
   return Boolean(el.checked);
 }
 
 function getString(panel, name, fallback) {
   const el = panel?.querySelector?.(`[name="${name}"]`);
   const value = String(el?.value ?? "").trim();
+
   return value.length ? value : fallback;
 }
 
@@ -244,6 +253,26 @@ function beginPickOriginOnCanvas(panel) {
   ui.notifications.info("FX Bus: click the scene to pick the recoil origin.");
 }
 
+function cancelOriginPickOnAbort(signal) {
+  /**
+   * Large comment:
+   * Canvas-stage pointer handlers are not DOM event listeners, so AbortSignal
+   * cannot remove them automatically.
+   *
+   * Bind one abort listener for the current render so a detached/re-rendered
+   * panel cannot leave a stale canvas pick handler behind.
+   */
+  if (!signal) return;
+
+  signal.addEventListener(
+    "abort",
+    () => {
+      cancelActiveOriginPick();
+    },
+    { once: true }
+  );
+}
+
 export function tokenRecoilTabDef() {
   return {
     id: TAB_ID,
@@ -325,65 +354,91 @@ export function tokenRecoilTabDef() {
      *
      * @param {HTMLElement} root
      * @param {object} runtime
+     * @param {AbortSignal} signal
      */
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = getPanel(root);
       if (!panel) return;
+
+      cancelOriginPickOnAbort(signal);
 
       const useSelected = panel.querySelector('input[name="recoilUseSelectedOrigin"]');
 
       if (useSelected) {
-        useSelected.addEventListener("change", () => syncOriginControls(panel));
+        useSelected.addEventListener(
+          "change",
+          () => {
+            syncOriginControls(panel);
+          },
+          { signal }
+        );
+
         syncOriginControls(panel);
       }
 
       panel
         .querySelector('button[type="button"][data-action="recoilPickOriginOnCanvas"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          beginPickOriginOnCanvas(panel);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            beginPickOriginOnCanvas(panel);
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="recoilSetOriginFromSelected"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          updateOriginFromSelected(panel);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            updateOriginFromSelected(panel);
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="recoilStart"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
 
-          try {
-            const payload = this.buildApplyPayload(root, runtime);
-            runtime.emit(payload);
-          } catch (err) {
-            ui.notifications.error("FX Bus: failed to build Token Recoil payload. See console.");
-            console.error("[FX Bus] Token Recoil payload failed", err);
-          }
-        });
+            try {
+              const payload = this.buildApplyPayload(root, runtime);
+              runtime.emit(payload);
+            } catch (err) {
+              ui.notifications.error("FX Bus: failed to build Token Recoil payload. See console.");
+              console.error("[FX Bus] Token Recoil payload failed", err);
+            }
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="recoilStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
 
-          const tokenIds = selectedTokenIds();
+            const tokenIds = selectedTokenIds();
 
-          if (tokenIds.length > 0) {
+            if (tokenIds.length > 0) {
+              runtime.emit({
+                action: "fx.tokenRecoil.stop",
+                tokenIds
+              });
+              return;
+            }
+
             runtime.emit({
-              action: "fx.tokenRecoil.stop",
-              tokenIds
+              action: "fx.tokenRecoil.stop"
             });
-            return;
-          }
-
-          runtime.emit({
-            action: "fx.tokenRecoil.stop"
-          });
-        });
+          },
+          { signal }
+        );
     }
   };
 }

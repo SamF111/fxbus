@@ -20,6 +20,10 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply, including start vs update decision and current token selection.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, selectedTokenIds } from "./shared/panelUtils.js";
@@ -111,13 +115,13 @@ export function tokenOscTabDef() {
       return buildPayload(root, runtime);
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      function stop() {
+      const stop = () => {
         const tokenIds = selectedTokenIds();
 
         if (tokenIds.length === 0) {
@@ -129,30 +133,38 @@ export function tokenOscTabDef() {
           action: "fx.tokenOsc.stop",
           tokenIds
         });
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         try {
           runtime.emit(buildPayload(root, runtime));
         } catch (err) {
           ui.notifications.warn("Select one or more tokens for Token Oscillation.");
           console.warn("[FX Bus] Token Osc apply failed", err);
         }
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="oscStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="oscApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

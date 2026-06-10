@@ -10,6 +10,10 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, setDisabled } from "./shared/panelUtils.js";
@@ -49,7 +53,7 @@ export function screenNoiseTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
@@ -64,31 +68,40 @@ export function screenNoiseTabDef() {
           setDisabled(dur, on);
           if (on) dur.value = "0";
         };
-        until.addEventListener("change", sync);
+
+        until.addEventListener("change", sync, { signal });
         sync();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.noise.stop" });
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="noiseStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="noiseApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

@@ -16,6 +16,10 @@
  * Copy Macro:
  * - buildApplyPayload(root, runtime) returns the same payload used by Apply.
  * - Static macro copying requires selected tiles, because tileIds are baked into the payload.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import {
@@ -197,22 +201,22 @@ export function tileFlowTabDef() {
       return buildPayload(panel, tileIds);
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      function apply() {
+      const apply = () => {
         const tileIds = getSelectedTileIdsOrWarn();
         if (tileIds.length === 0) return;
 
         const payload = buildPayload(panel, tileIds);
 
         runtime.emit(payload);
-      }
+      };
 
-      function stopSelected() {
+      const stopSelected = () => {
         const tileIds = getSelectedTileIdsOrWarn();
         if (tileIds.length === 0) return;
 
@@ -223,37 +227,49 @@ export function tileFlowTabDef() {
             selectValue(panel, "tileFlowStopMode", "reset")
           )
         });
-      }
+      };
 
-      function stopAll() {
+      const stopAll = () => {
         runtime.emit({
           action: "fx.tileFlow.stop",
           stopMode: normaliseStopMode(
             selectValue(panel, "tileFlowStopMode", "reset")
           )
         });
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-action="tileFlowApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="tileFlowStopSelected"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stopSelected();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stopSelected();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="tileFlowStopAll"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stopAll();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stopAll();
+          },
+          { signal }
+        );
     }
   };
 }

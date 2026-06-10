@@ -54,7 +54,8 @@
  *   bounds and make the whole tile image repeat as miniature copies.
  *
  * Long-running stability:
- * - Accumulated tile flow phase is wrapped to a large safe pixel range.
+ * - Accumulated tile flow phase is wrapped to a large phase-safe pixel range.
+ * - Wrap spans are whole displayed texture repeat periods, preventing visible snap.
  * - This prevents very long-running flows from building huge tilePosition values.
  * - Force reset always overrides retain behaviour.
  */
@@ -85,7 +86,7 @@ const DEFAULT_ACCELERATION_DURATION_MS = 5000;
 const MIN_SCALE = 0.0001;
 const BLEED_PX = 2;
 const Z_ORDER_EPSILON = 0.0001;
-const PHASE_WRAP_PX = 100000;
+const PHASE_WRAP_THRESHOLD_PX = 100000;
 
 let warnedBleedFailure = false;
 
@@ -1097,23 +1098,65 @@ function phaseFromId(id) {
   return Math.abs(hash % 10000) / 10000;
 }
 
-function wrapPhasePx(value) {
+function wrapPhaseAxisPx(value, periodPx) {
   /**
    * Large comment:
-   * Keep accumulated displayed-pixel phase inside a stable numeric range.
+   * Keep accumulated displayed-pixel phase bounded without changing the visible
+   * texture phase.
    *
-   * Tile Flow can intentionally run for hours. If tilePositionX/Y are allowed to
-   * grow forever, precision loss can appear in PIXI transforms or texture-space
-   * coordinates. Wrapping is visually safe for repeated texture scrolling and
-   * prevents long-session phase blow-up.
+   * The wrap span must be a whole-number multiple of the displayed repeat
+   * period. Wrapping at an arbitrary fixed distance can visibly snap because it
+   * changes the sampled texture phase.
+   *
+   * Use floor(threshold / period) + 1 so the wrap span is always greater than
+   * the configured threshold, while still being phase-equivalent.
    */
   const n = Number(value);
-
   if (!Number.isFinite(n)) return 0;
 
-  const wrapped = n % PHASE_WRAP_PX;
+  const period = Math.abs(Number(periodPx));
+  if (!Number.isFinite(period) || period <= MIN_SCALE) return n;
 
-  return wrapped < 0 ? wrapped + PHASE_WRAP_PX : wrapped;
+  const multiple = Math.max(
+    1,
+    Math.floor(PHASE_WRAP_THRESHOLD_PX / period) + 1
+  );
+
+  const wrapSpan = period * multiple;
+
+  if (Math.abs(n) < wrapSpan) return n;
+
+  const wrapped = n % wrapSpan;
+
+  return wrapped < 0 ? wrapped + wrapSpan : wrapped;
+}
+
+function wrapStatePhasePx(state) {
+  /**
+   * Large comment:
+   * Keep accumulated displayed-pixel phase bounded without changing the visible
+   * texture phase.
+   *
+   * The displayed repeat period is:
+   *   source texture size * effective tile scale
+   *
+   * Wrapping by a whole-number multiple of that period preserves the exact
+   * sampled texture phase. Wrapping by an arbitrary pixel value does not.
+   */
+  if (!state) return;
+
+  const periodX = Math.max(
+    MIN_SCALE,
+    Number(state.textureWidth ?? 1) * Number(state.effectiveTileScaleX ?? 1)
+  );
+
+  const periodY = Math.max(
+    MIN_SCALE,
+    Number(state.textureHeight ?? 1) * Number(state.effectiveTileScaleY ?? 1)
+  );
+
+  state.tilePositionX = wrapPhaseAxisPx(state.tilePositionX, periodX);
+  state.tilePositionY = wrapPhaseAxisPx(state.tilePositionY, periodY);
 }
 
 function setSpriteTilePosition(state) {
@@ -1129,14 +1172,17 @@ function setSpriteTilePosition(state) {
    * Do not round the texture-space position. Rounding creates sub-frame jumps
    * which are most visible at texture repetition boundaries at certain canvas
    * zoom levels.
+   *
+   * Phase wrapping must preserve the visible texture phase. Therefore the
+   * accumulated displayed-pixel phase is only wrapped by whole displayed texture
+   * repeat periods, never by an arbitrary fixed distance.
    */
   if (!state?.sprite) return;
 
   const scaleX = Math.max(MIN_SCALE, Number(state.effectiveTileScaleX ?? 1));
   const scaleY = Math.max(MIN_SCALE, Number(state.effectiveTileScaleY ?? 1));
 
-  state.tilePositionX = wrapPhasePx(state.tilePositionX);
-  state.tilePositionY = wrapPhasePx(state.tilePositionY);
+  wrapStatePhasePx(state);
 
   state.sprite.roundPixels = false;
 
@@ -1161,12 +1207,8 @@ function applyInitialPhase(state) {
     state.documentState.height
   );
 
-  state.tilePositionX = wrapPhasePx(
-    state.tilePositionX + (Math.cos(angleRad) * phaseDistance)
-  );
-  state.tilePositionY = wrapPhasePx(
-    state.tilePositionY + (Math.sin(angleRad) * phaseDistance)
-  );
+  state.tilePositionX += Math.cos(angleRad) * phaseDistance;
+  state.tilePositionY += Math.sin(angleRad) * phaseDistance;
 
   setSpriteTilePosition(state);
 }
@@ -1264,8 +1306,8 @@ function updateRunningState(runtime, tileId, state, deltaMS) {
 
   const velocity = velocityVector(state);
 
-  state.tilePositionX = wrapPhasePx(state.tilePositionX + (velocity.x * dtSec));
-  state.tilePositionY = wrapPhasePx(state.tilePositionY + (velocity.y * dtSec));
+  state.tilePositionX += velocity.x * dtSec;
+  state.tilePositionY += velocity.y * dtSec;
   state.currentSpeedPxPerSec = velocity.speed;
 
   setSpriteTilePosition(state);
@@ -1345,9 +1387,9 @@ function updateExistingState(runtime, tileId, state, params) {
    * Large comment:
    * Restart or update an existing Tile Flow state.
    *
-   * Retained tilePosition offsets are preserved, but kept wrapped. This means a
-   * retained flow can resume from its current visual phase without unbounded
-   * numeric growth.
+   * Retained tilePosition offsets are preserved, but kept phase-safe wrapped.
+   * This means a retained flow can resume from its current visual phase without
+   * unbounded numeric growth or visible snap.
    */
   state.angleDeg = params.angleDeg;
   state.startSpeedPxPerSec = params.startSpeedPxPerSec;
@@ -1365,8 +1407,7 @@ function updateExistingState(runtime, tileId, state, params) {
   state.currentSpeedPxPerSec = params.startSpeedPxPerSec;
   state.status = STATUS_RUNNING;
 
-  state.tilePositionX = wrapPhasePx(state.tilePositionX);
-  state.tilePositionY = wrapPhasePx(state.tilePositionY);
+  wrapStatePhasePx(state);
 
   if (!syncOverlayToTile(state)) {
     resetState(runtime, tileId, state);
@@ -1489,8 +1530,7 @@ function stop(runtime, payload) {
     if (!state) continue;
 
     if (mode === MODE_RETAIN) {
-      state.tilePositionX = wrapPhasePx(state.tilePositionX);
-      state.tilePositionY = wrapPhasePx(state.tilePositionY);
+      wrapStatePhasePx(state);
       state.status = STATUS_HELD;
       setSpriteTilePosition(state);
       continue;

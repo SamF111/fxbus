@@ -15,6 +15,10 @@
  * Copy-to-macro support:
  * - Adds buildApplyPayload(root, runtime) used by the GM panel.
  * - Payload is identical to the "Start" emission.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, normaliseHex, setDisabled, syncColourPair } from "./shared/panelUtils.js";
@@ -74,14 +78,14 @@ export function screenPulseTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
       // Colour picker + text field pair
-      syncColourPair(panel, "pulseColourPicker", "pulseColour", "#ff0000");
+      syncColourPair(panel, "pulseColourPicker", "pulseColour", "#ff0000", signal);
 
       const until = panel.querySelector('input[name="pulseUntilStopped"]');
       const dur = panel.querySelector('input[name="pulseDurationMs"]');
@@ -111,36 +115,44 @@ export function screenPulseTabDef() {
       };
 
       if (until && dur) {
-        until.addEventListener("change", syncDuration);
+        until.addEventListener("change", syncDuration, { signal });
         syncDuration();
       }
 
       if (mode) {
-        mode.addEventListener("change", syncMode);
+        mode.addEventListener("change", syncMode, { signal });
         syncMode();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.screenPulse.stop" });
-      }
+      };
 
-      function start() {
+      const start = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-action="pulseStart"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          start.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            start();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="pulseStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
     }
   };
 }

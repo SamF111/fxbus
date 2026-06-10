@@ -13,6 +13,10 @@
  * Conventions:
  * - Uses the shared panel-level "fxbusCopyToMacro" handler via data-action="fxbusCopyToMacro".
  * - Uses data-do for local button wiring, matching other tabs.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 const TAB_ID = "reset";
@@ -33,22 +37,26 @@ export function resetTabDef() {
       return { action: "fx.bus.reset" };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      function apply() {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="resetApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

@@ -10,6 +10,10 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, setDisabled } from "./shared/panelUtils.js";
@@ -42,10 +46,12 @@ export function screenChromAbTabDef() {
         panel.querySelector('input[name="chromAbAmountPx"]')?.value,
         1.2
       );
+
       const minAmountPx = num(
         panel.querySelector('input[name="chromAbMinAmountPx"]')?.value,
         amountPx
       );
+
       const maxAmountPx = num(
         panel.querySelector('input[name="chromAbMaxAmountPx"]')?.value,
         amountPx
@@ -71,7 +77,7 @@ export function screenChromAbTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
@@ -86,31 +92,40 @@ export function screenChromAbTabDef() {
           setDisabled(dur, on);
           if (on) dur.value = "0";
         };
-        until.addEventListener("change", sync);
+
+        until.addEventListener("change", sync, { signal });
         sync();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.chromAb.stop" });
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="chromAbStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="chromAbApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }
