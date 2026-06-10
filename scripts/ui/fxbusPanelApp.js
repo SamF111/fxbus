@@ -26,6 +26,7 @@
  * - Existing internal names and action strings are preserved.
  * - screenRotate remains internally named screenRotate/rotate.
  * - screenRotate is presented in the GUI as Canvas > Roll.
+ * - canvasMirror is presented in the GUI as Canvas > Mirror.
  *
  * Current v14 stability decision:
  * - Token Tether is enabled.
@@ -57,6 +58,7 @@ import { screenBlurTabDef } from "./tabs/screenBlurTab.js";
 import { screenSmearTabDef } from "./tabs/screenSmearTab.js";
 import { screenStreakTabDef } from "./tabs/screenStreakTab.js";
 import { screenMonochromeTabDef } from "./tabs/screenMonochromeTab.js";
+import { canvasMirrorTabDef } from "./tabs/canvasMirrorTab.js";
 import { resetTabDef } from "./tabs/resetTab.js";
 
 import {
@@ -80,6 +82,7 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tileFlowTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenRotateTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/canvasMirrorTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenPulseTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenVignetteTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenChromAbTab.hbs`,
@@ -217,7 +220,8 @@ function buildGroups() {
   const screenStreak = screenStreakTabDef();
   const screenMonochrome = screenMonochromeTabDef();
 
-  const screenRotate = relabelTab(screenRotateTabDef(), "Roll");
+  const screenRotate = relabelTab(screenRotateTabDef(), "Canvas Roll");
+  const canvasMirror = canvasMirrorTabDef();
 
   return [
     {
@@ -258,7 +262,8 @@ function buildGroups() {
       id: "canvas",
       label: "Canvas",
       tabs: [
-        screenRotate
+        screenRotate,
+        canvasMirror
       ]
     },
     {

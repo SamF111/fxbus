@@ -12,10 +12,11 @@
  * - None
  *
  * Notes:
- * - Token Dolly Zoom has graduated out of this temporary file and now lives in
- *   tokenDollyZoomFx.js.
  * - Keep this file as a no-op registry so index.js does not need to change every
  *   time the experimental slot is empty.
+ * - Short-lived experiments may be added here temporarily.
+ * - Stable effects should live in their own effect files and be registered from
+ *   effects/index.js.
  */
 
 export function registerExperimentalFx(_runtime) {

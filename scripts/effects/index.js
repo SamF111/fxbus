@@ -30,6 +30,8 @@ import { registerScreenStreakFx } from "./screenStreakFx.js";
 import { registerScreenMonochromeFx } from "./screenMonochromeFx.js";
 import { registerScreenRotateFx } from "./screenRotateFx.js";
 
+import { registerCanvasMirrorFx } from "./canvasMirrorFx.js";
+
 import { registerTileOscillationFx } from "./tileOscillationFx.js";
 import { registerTileFlickerFx } from "./tileFlickerFx.js";
 import { registerTileFlowFx } from "./tileFlowFx.js";
@@ -53,11 +55,7 @@ export function registerBuiltInEffects(runtime) {
 
   /**
    * Large comment:
-   * Register stable production screen and canvas effects.
-   *
-   * Screen Rotate is internally named as a screen effect because that is how the
-   * existing implementation is structured, even if the UI may present it under
-   * Canvas.
+   * Register stable production screen effects.
    */
   registerScreenShakeFx(runtime);
   registerScreenPulseFx(runtime);
@@ -68,7 +66,18 @@ export function registerBuiltInEffects(runtime) {
   registerScreenSmearFx(runtime);
   registerScreenStreakFx(runtime);
   registerScreenMonochromeFx(runtime);
+
+  /**
+   * Large comment:
+   * Register stable production canvas effects.
+   *
+   * Screen Rotate is internally named as a screen effect because that is how the
+   * existing implementation is structured, even if the UI may present it under
+   * Canvas. Canvas Mirror is a true canvas-output effect because it mirrors the
+   * rendered canvas element rather than mutating PIXI scene objects.
+   */
   registerScreenRotateFx(runtime);
+  registerCanvasMirrorFx(runtime);
 
   /**
    * Large comment:

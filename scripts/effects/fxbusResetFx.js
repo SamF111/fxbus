@@ -52,6 +52,9 @@ const SCREEN_STREAK_STOP = "fx.screenStreak.stop";
 const SCREEN_MONOCHROME_STOP = "fx.screenMonochrome.stop";
 const SCREEN_COLOUR_SHIFT_STOP = "fx.screenColourShift.stop";
 
+// Canvas stop actions
+const CANVAS_MIRROR_STOP = "fx.canvasMirror.stop";
+
 export function registerFxbusResetFx(runtime) {
   if (!runtime?.handlers) {
     throw new Error("[FX Bus] fxbusResetFx: invalid runtime.");
@@ -251,6 +254,24 @@ function buildForcedTokenResetPayload(action) {
   };
 }
 
+function buildForcedCanvasResetPayload(action) {
+  /**
+   * Large comment:
+   * Build a canvas reset payload that asks DOM/canvas-output effects to restore
+   * immediately where supported.
+   *
+   * Canvas Mirror restores inline canvas element styles and removes its event
+   * interception through its own stop handler.
+   */
+  return {
+    action,
+    reset: true,
+    forceReset: true,
+    immediate: true,
+    restore: true
+  };
+}
+
 function onReset(runtime) {
   /**
    * Large comment:
@@ -262,8 +283,9 @@ function onReset(runtime) {
    * 4. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
    * 5. Force Tile Flow to reset rather than retain final phase.
    * 6. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
-   * 7. Remove any residual tickers.
-   * 8. Clear runtime maps as a final backstop.
+   * 7. Stop canvas-output effects so DOM canvas transforms and event interception are removed.
+   * 8. Remove any residual tickers.
+   * 9. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
 
@@ -367,6 +389,12 @@ function onReset(runtime) {
     immediate: true,
     forceReset: true
   });
+
+  stopIfPresent(
+    runtime,
+    CANVAS_MIRROR_STOP,
+    buildForcedCanvasResetPayload(CANVAS_MIRROR_STOP)
+  );
 
   backstopTickerCleanup(runtime);
 

@@ -1,0 +1,56 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\canvasMirrorTab.hbs --}}
+
+<p class="fxbus-muted">
+  Visual-only canvas mirror. Use for wrong-side reality, dream logic, mirror realms, dimensional inversions, cursed reflections, or sudden perspective shifts.
+</p>
+
+<p class="fxbus-muted">
+  Mouse coordinates are remapped to match the flipped canvas. This is playable for simple player interaction, but GM interaction may feel clunky while tokens are moving.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Axis</label>
+    <select name="canvasMirrorAxis">
+      <option value="x" selected>Horizontal</option>
+      <option value="y">Vertical</option>
+      <option value="xy">Both axes</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Transition</label>
+    <select name="canvasMirrorTransition">
+      <option value="instant" selected>Instant</option>
+      <option value="fold">Fold</option>
+      <option value="realityRipple">Reality ripple</option>
+      <option value="glitchSnap">Glitch snap</option>
+    </select>
+  </div>
+</div>
+
+<div class="form-group">
+  <label>Transition duration (ms)</label>
+  <input
+    type="number"
+    name="canvasMirrorTransitionMs"
+    value="0"
+    step="50"
+    min="0"
+    max="5000"
+  />
+</div>
+
+<p class="fxbus-muted">
+  Fold flips the live canvas into its mirrored state. Reality ripple briefly squashes and distorts the live canvas. Glitch snap adds a sharp digital displacement before settling into the mirror. Interaction remains remapped after the transition completes.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-action="canvasMirrorStart">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="canvasMirrorStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
+</div>
