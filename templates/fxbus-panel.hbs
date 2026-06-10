@@ -56,6 +56,15 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'tokenDollyZoom'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="tokenDollyZoom"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenDollyZoomTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileOsc'))}}active{{/if}}"
           data-group="fxbus"
           data-category="tile"

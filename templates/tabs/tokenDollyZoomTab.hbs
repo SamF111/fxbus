@@ -1,0 +1,90 @@
+<p class="fxbus-muted">
+  Select one or more tokens. The dolly anchor is the selected token centre, or the midpoint of all selected tokens. If no token is selected, the effect falls back to the screen centre.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Mode</label>
+    <select name="tokenDollyZoomMode">
+      <option value="punchIn" selected>Punch In</option>
+      <option value="punchOut">Punch Out</option>
+      <option value="punchInOut">Punch In/Out</option>
+      <option value="punchOutIn">Punch Out/In</option>
+      <option value="snapFocus">Snap Focus</option>
+      <option value="wobble">Wobble</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Easing</label>
+    <select name="tokenDollyZoomEasing">
+      <option value="linear">Linear</option>
+      <option value="easeInQuad">Ease In Quad</option>
+      <option value="easeOutQuad">Ease Out Quad</option>
+      <option value="easeInOutQuad">Ease In/Out Quad</option>
+      <option value="easeInCubic">Ease In Cubic</option>
+      <option value="easeOutCubic">Ease Out Cubic</option>
+      <option value="easeInOutCubic" selected>Ease In/Out Cubic</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Zoom</label>
+    <input type="number" name="tokenDollyZoomZoom" value="0.55" step="0.01" min="0.2" max="3"/>
+  </div>
+
+  <div class="form-group">
+    <label>Duration (ms)</label>
+    <input type="number" name="tokenDollyZoomDurationMs" value="6500" step="100" min="0" max="10000"/>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Counter-scale amount</label>
+    <input type="number" name="tokenDollyZoomCounterScaleAmount" value="1.25" step="0.05"/>
+  </div>
+
+  <div class="form-group">
+    <label>Snap peak (0.15-0.85)</label>
+    <input type="number" name="tokenDollyZoomSnapPeakAt" value="0.45" step="0.01" min="0.15" max="0.85"/>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Roll (deg)</label>
+    <input type="number" name="tokenDollyZoomRollDeg" value="0" step="0.1" min="-30" max="30"/>
+  </div>
+
+  <div class="form-group">
+    <label>Drift (px)</label>
+    <input type="number" name="tokenDollyZoomDriftPx" value="0" step="1" min="0" max="300"/>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Wobble</label>
+    <input type="number" name="tokenDollyZoomWobble" value="0" step="0.001" min="0" max="0.25"/>
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="tokenDollyZoomCancelOnCanvasNavigation" checked/>
+      Cancel on canvas navigation
+    </label>
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="tokenDollyZoomApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenDollyZoomStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
+</div>

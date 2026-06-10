@@ -43,6 +43,7 @@
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
 import { tokenLaserTabDef } from "./tabs/tokenLaserTab.js";
 import { tokenRecoilTabDef } from "./tabs/tokenRecoilTab.js";
+import { tokenDollyZoomTabDef } from "./tabs/tokenDollyZoomTab.js";
 import { tileOscTabDef } from "./tabs/tileOscTab.js";
 import { tileFlickerTabDef } from "./tabs/tileFlickerTab.js";
 import { tileFlowTabDef } from "./tabs/tileFlowTab.js";
@@ -73,6 +74,7 @@ const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenLaserTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tokenDollyZoomTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileFlickerTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileFlowTab.hbs`,
@@ -199,6 +201,7 @@ function buildGroups() {
   const tokenOsc = tokenOscTabDef();
   const tokenLaser = tokenLaserTabDef();
   const tokenRecoil = tokenRecoilTabDef();
+  const tokenDollyZoom = tokenDollyZoomTabDef();
 
   const tileOsc = tileOscTabDef();
   const tileFlicker = tileFlickerTabDef();
@@ -223,7 +226,8 @@ function buildGroups() {
       tabs: [
         tokenOsc,
         relabelTab(tokenLaser, "Token Tether"),
-        tokenRecoil
+        tokenRecoil,
+        tokenDollyZoom
       ]
     },
     {

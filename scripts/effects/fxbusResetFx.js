@@ -29,6 +29,7 @@ const ACTION_RESET = "fx.bus.reset";
 const TOKEN_OSC_STOP = "fx.tokenOsc.stop";
 const TOKEN_OSC_STOP_LEGACY = "tokenOscStop";
 const TOKEN_RECOIL_STOP = "fx.tokenRecoil.stop";
+const TOKEN_DOLLY_ZOOM_STOP = "fx.tokenDollyZoom.stop";
 const TOKEN_LASER_STOP_ALL = "fx.tokenLaser.stopAll";
 const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
 
@@ -232,18 +233,37 @@ function buildForcedScreenResetPayload(action) {
   };
 }
 
+function buildForcedTokenResetPayload(action) {
+  /**
+   * Large comment:
+   * Build a token reset payload that asks effects to restore their baseline
+   * immediately where supported.
+   *
+   * Token Dolly Zoom stores its own snapshots and restores them through its stop
+   * handler. The extra flags are harmless if ignored.
+   */
+  return {
+    action,
+    reset: true,
+    forceReset: true,
+    immediate: true,
+    restore: true
+  };
+}
+
 function onReset(runtime) {
   /**
    * Large comment:
    * Global reset order matters:
    *
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
-   * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
-   * 3. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
-   * 4. Force Tile Flow to reset rather than retain final phase.
-   * 5. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
-   * 6. Remove any residual tickers.
-   * 7. Clear runtime maps as a final backstop.
+   * 2. Stop Token Dolly Zoom before ticker cleanup so it can restore canvas and token visual snapshots.
+   * 3. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
+   * 4. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
+   * 5. Force Tile Flow to reset rather than retain final phase.
+   * 6. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
+   * 7. Remove any residual tickers.
+   * 8. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
 
@@ -271,6 +291,12 @@ function onReset(runtime) {
       action: TOKEN_RECOIL_STOP
     });
   }
+
+  stopIfPresent(
+    runtime,
+    TOKEN_DOLLY_ZOOM_STOP,
+    buildForcedTokenResetPayload(TOKEN_DOLLY_ZOOM_STOP)
+  );
 
   stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
     action: TOKEN_LASER_STOP_ALL
