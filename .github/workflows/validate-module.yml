@@ -6,6 +6,7 @@ on:
       - main
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -82,12 +83,14 @@ jobs:
             exit 1
           fi
 
-          if [[ "$manifest" != "https://github.com/SamF111/fxbus/releases/latest/download/module.json" ]]; then
-            echo "::error::Unexpected manifest URL: $manifest"
+          expected_manifest="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/module.json"
+          expected_download="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${version}/fxbus.zip"
+
+          if [ "$manifest" != "$expected_manifest" ]; then
+            echo "::error::manifest URL must be: $expected_manifest"
+            echo "::error::got: $manifest"
             exit 1
           fi
-
-          expected_download="https://github.com/SamF111/fxbus/releases/download/v${version}/fxbus.zip"
 
           if [ "$download" != "$expected_download" ]; then
             echo "::error::download URL must be: $expected_download"
@@ -147,44 +150,44 @@ jobs:
           set -euo pipefail
 
           python3 <<'PY'
-          import pathlib
-          import re
-          import sys
+import pathlib
+import re
+import sys
 
-          root = pathlib.Path(".").resolve()
-          scripts = root / "scripts"
+root = pathlib.Path(".").resolve()
+scripts = root / "scripts"
 
-          import_pattern = re.compile(
-              r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
-          )
+import_pattern = re.compile(
+    r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
+)
 
-          ok = True
+ok = True
 
-          for path in sorted(scripts.rglob("*.js")):
-              text = path.read_text(encoding="utf-8")
+for path in sorted(scripts.rglob("*.js")):
+    text = path.read_text(encoding="utf-8")
 
-              for match in import_pattern.finditer(text):
-                  specifier = match.group(1)
+    for match in import_pattern.finditer(text):
+        specifier = match.group(1)
 
-                  if not specifier.startswith("."):
-                      continue
+        if not specifier.startswith("."):
+            continue
 
-                  target = (path.parent / specifier).resolve()
+        target = (path.parent / specifier).resolve()
 
-                  candidates = [
-                      target,
-                      target.with_suffix(".js") if target.suffix == "" else target,
-                      target / "index.js",
-                  ]
+        candidates = [
+            target,
+            target.with_suffix(".js") if target.suffix == "" else target,
+            target / "index.js",
+        ]
 
-                  if not any(candidate.exists() for candidate in candidates):
-                      rel_path = path.relative_to(root)
-                      print(f"::error file={rel_path}::Missing local import target: {specifier}")
-                      ok = False
+        if not any(candidate.exists() for candidate in candidates):
+            rel_path = path.relative_to(root)
+            print(f"::error file={rel_path}::Missing local import target: {specifier}")
+            ok = False
 
-          if not ok:
-              sys.exit(1)
-          PY
+if not ok:
+    sys.exit(1)
+PY
 
       - name: Validate Handlebars templates
         shell: bash
@@ -213,36 +216,36 @@ jobs:
           set -euo pipefail
 
           python3 <<'PY'
-          import pathlib
-          import re
-          import sys
+import pathlib
+import re
+import sys
 
-          root = pathlib.Path(".").resolve()
-          templates = root / "templates"
+root = pathlib.Path(".").resolve()
+templates = root / "templates"
 
-          partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
+partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
 
-          ok = True
+ok = True
 
-          for path in sorted(templates.rglob("*.hbs")):
-              text = path.read_text(encoding="utf-8")
+for path in sorted(templates.rglob("*.hbs")):
+    text = path.read_text(encoding="utf-8")
 
-              for match in partial_pattern.finditer(text):
-                  partial = match.group(1)
+    for match in partial_pattern.finditer(text):
+        partial = match.group(1)
 
-                  if partial.startswith("modules/fxbus/"):
-                      target = root / partial.removeprefix("modules/fxbus/")
-                  else:
-                      target = path.parent / partial
+        if partial.startswith("modules/fxbus/"):
+            target = root / partial.removeprefix("modules/fxbus/")
+        else:
+            target = path.parent / partial
 
-                  if not target.exists():
-                      rel_path = path.relative_to(root)
-                      print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
-                      ok = False
+        if not target.exists():
+            rel_path = path.relative_to(root)
+            print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
+            ok = False
 
-          if not ok:
-              sys.exit(1)
-          PY
+if not ok:
+    sys.exit(1)
+PY
 
       - name: Validate expected folders exist
         shell: bash
