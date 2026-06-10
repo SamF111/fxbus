@@ -23,6 +23,7 @@
  * - durationMs: number
  * - completionMode: "reset" | "retain"
  * - stopMode: "reset" | "retain"
+ * - forceReset: boolean
  * - randomPhase: boolean
  * - overlayAlpha: number
  * - blendMode: string
@@ -40,35 +41,10 @@
  * - The overlay is clipped to the tile rectangle.
  * - Stop/reset destroys only the overlay, mask, and any FX-owned temporary texture.
  *
- * Scaled texture rule:
- * - Foundry can display a tile much larger or smaller than its source texture.
- * - Tile Flow must preserve that apparent tile scale.
- * - The overlay therefore sets tileScale from document size / source texture size.
- * - Movement is converted from displayed canvas pixels into texture-space pixels.
- *
- * Repetition-boundary shimmer rule:
- * - Do not round TilingSprite.tilePosition.
- * - Rounding texture-space movement can create tiny discontinuous jumps.
- * - Those jumps are most visible at texture repetition boundaries at certain canvas zoom levels.
- * - The overlay uses a small bleeded render texture where possible, so texture filtering
- *   samples matching edge pixels at the repeat seam.
- *
- * Render-context rule:
- * - No hard-coded road/cloud mode.
- * - No hard-coded foreground/background/overhead layer.
- * - No hard-coded z-order.
- * - The targeted tile's current render object decides where the flow overlay lives.
- *
- * Z-order rule:
- * - The overlay should render just above its own tile mesh.
- * - The overlay must not jump above unrelated tiles that have a higher assigned z-order.
- * - Sortable PIXI parents use a tiny zIndex offset above the source tile.
- * - Non-sortable PIXI parents use child index immediately after the source tile.
- *
- * Acceleration endpoint:
- * - accelerationDurationMs controls how long acceleration is applied.
- * - After accelerationDurationMs expires, the tile continues indefinitely at
- *   the reached steady speed until stopped or durationMs expires.
+ * Long-running stability:
+ * - Accumulated tile flow phase is wrapped to a large safe pixel range.
+ * - This prevents very long-running flows from building huge tilePosition values.
+ * - Force reset always overrides retain behaviour.
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
@@ -97,6 +73,7 @@ const DEFAULT_ACCELERATION_DURATION_MS = 5000;
 const MIN_SCALE = 0.0001;
 const BLEED_PX = 2;
 const Z_ORDER_EPSILON = 0.0001;
+const PHASE_WRAP_PX = 100000;
 
 let warnedBleedFailure = false;
 
@@ -211,14 +188,6 @@ function getTileTextureScale(documentState, texture, repeatScale) {
    * Large comment:
    * Compute the tileScale that makes a TilingSprite display the same apparent
    * image scale as the real Foundry tile.
-   *
-   * Example:
-   * - document width = 2600
-   * - source texture width = 393
-   * - base scale = 6.6158
-   *
-   * Without this, the TilingSprite repeats the native 393 px texture many times
-   * across the 2600 px tile.
    */
   const textureSize = getTextureDimensions(texture);
 
@@ -444,9 +413,6 @@ function createBleededFlowTexture(sourceTexture) {
    * texture. Its frame remains the original source size, so tileScale and repeat
    * cadence stay correct, while linear filtering near the seam can sample the
    * duplicated edge pixels outside the frame.
-   *
-   * If anything fails, return null so Tile Flow can safely fall back to the
-   * original source texture.
    */
   const renderer = canvas?.app?.renderer;
   if (!renderer || !sourceTexture?.baseTexture || !PIXI?.RenderTexture) return null;
@@ -668,14 +634,6 @@ function createOverlayObjects(tileId, sourceTexture, documentState) {
   /**
    * Large comment:
    * Create the passive context-following overlay.
-   *
-   * Display tree:
-   *   container
-   *     tilingSprite
-   *     mask
-   *
-   * The sprite uses a Tile Flow-owned bleeded texture when possible. If bleed
-   * texture generation fails, it falls back to the original source texture.
    */
   const textureBundle = createOverlayTextureBundle(sourceTexture);
 
@@ -727,10 +685,6 @@ function refreshOverlayTextureForSource(state, sourceTexture) {
   /**
    * Large comment:
    * Recreate the overlay texture if the Foundry tile's source texture changes.
-   *
-   * This can happen if the tile redraws, its source changes, or Foundry refreshes
-   * the underlying render object. The old FX-owned bleed texture is destroyed
-   * before a new one is assigned.
    */
   if (!state || state.sourceTexture === sourceTexture) return;
 
@@ -755,17 +709,6 @@ function applyOverlayRenderOrder(state) {
    * Large comment:
    * Keep the Flow overlay in the same render ordering context as its source
    * tile without overwriting or flattening the tile layer's existing z-order.
-   *
-   * The Flow overlay must render just above its own tile mesh, but it must not
-   * jump above unrelated tiles that have a higher assigned z-order.
-   *
-   * Foundry/PIXI parents may be sortable by zIndex. In that case, using exactly
-   * the same zIndex as the tile can be ambiguous after the parent sorts its
-   * children. A tiny positive offset keeps the overlay immediately above the
-   * tile in sorted parents while still preserving the tile's broader z-order.
-   *
-   * For non-sortable parents, child index is authoritative, so the overlay keeps
-   * the tile's zIndex and is placed directly after the tile object.
    */
   const object = state?.object;
   const container = state?.container;
@@ -781,14 +724,6 @@ function applyOverlayRenderOrder(state) {
       : objectZ;
   }
 
-  /**
-   * Large comment:
-   * Preserve common Foundry/module ordering metadata where present.
-   *
-   * These assignments are intentionally copied from the source tile object. They
-   * do not mutate the tile. They only make the passive overlay sort like the
-   * tile in parents or modules that inspect extra ordering fields.
-   */
   for (const field of ["sort", "sortLayer", "elevation"]) {
     if (object[field] !== undefined) {
       try {
@@ -812,16 +747,6 @@ function insertOverlayBesideTileObject(state) {
   /**
    * Large comment:
    * Insert the overlay into the tile render object's actual parent.
-   *
-   * This avoids hard-coding whether the tile is background, foreground, overhead,
-   * or in some module-managed render layer. The tile's current render object
-   * decides the overlay's render context.
-   *
-   * Ordering rule:
-   * - In sortable parents, zIndex is authoritative, so apply a tiny z-order
-   *   offset above the source tile.
-   * - In non-sortable parents, child index is authoritative, so keep the overlay
-   *   immediately after the source tile.
    */
   const object = state.object;
   const container = state.container;
@@ -879,9 +804,6 @@ function applyTileScaleToSprite(state) {
    * Large comment:
    * Apply the correct tileScale for the current tile document size and source
    * texture size.
-   *
-   * Use sourceTexture for the scale calculation, not the FX-owned bleeded texture,
-   * so the displayed size and repeat cadence remain based on the actual tile art.
    */
   const scale = getTileTextureScale(
     state.documentState,
@@ -903,9 +825,6 @@ function syncOverlayToTile(state) {
   /**
    * Large comment:
    * Sync the passive overlay to the current tile render context.
-   *
-   * This is the central no-hard-coding rule. The overlay follows the actual tile
-   * mesh/render object rather than deciding its own render layer or z-order.
    */
   const tile = getTileById(state.tileId);
   const object = getTileRenderObject(tile);
@@ -1007,6 +926,25 @@ function phaseFromId(id) {
   return Math.abs(hash % 10000) / 10000;
 }
 
+function wrapPhasePx(value) {
+  /**
+   * Large comment:
+   * Keep accumulated displayed-pixel phase inside a stable numeric range.
+   *
+   * Tile Flow can intentionally run for hours. If tilePositionX/Y are allowed to
+   * grow forever, precision loss can appear in PIXI transforms or texture-space
+   * coordinates. Wrapping is visually safe for repeated texture scrolling and
+   * prevents long-session phase blow-up.
+   */
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) return 0;
+
+  const wrapped = n % PHASE_WRAP_PX;
+
+  return wrapped < 0 ? wrapped + PHASE_WRAP_PX : wrapped;
+}
+
 function setSpriteTilePosition(state) {
   /**
    * Large comment:
@@ -1025,6 +963,9 @@ function setSpriteTilePosition(state) {
 
   const scaleX = Math.max(MIN_SCALE, Number(state.effectiveTileScaleX ?? 1));
   const scaleY = Math.max(MIN_SCALE, Number(state.effectiveTileScaleY ?? 1));
+
+  state.tilePositionX = wrapPhasePx(state.tilePositionX);
+  state.tilePositionY = wrapPhasePx(state.tilePositionY);
 
   state.sprite.roundPixels = false;
 
@@ -1049,8 +990,12 @@ function applyInitialPhase(state) {
     state.documentState.height
   );
 
-  state.tilePositionX += Math.cos(angleRad) * phaseDistance;
-  state.tilePositionY += Math.sin(angleRad) * phaseDistance;
+  state.tilePositionX = wrapPhasePx(
+    state.tilePositionX + (Math.cos(angleRad) * phaseDistance)
+  );
+  state.tilePositionY = wrapPhasePx(
+    state.tilePositionY + (Math.sin(angleRad) * phaseDistance)
+  );
 
   setSpriteTilePosition(state);
 }
@@ -1059,10 +1004,6 @@ function curve01(mode, p) {
   /**
    * Large comment:
    * Return a shaping value in [0, 1] for acceleration behaviour.
-   *
-   * Linear gives a true v = v0 + a*t relationship.
-   * Other modes shape the acceleration contribution over accelerationDurationMs
-   * and then hold the reached final speed.
    */
   const t = clamp(Number(p), 0, 1);
 
@@ -1084,13 +1025,6 @@ function computeSpeedPxPerSec(state) {
   /**
    * Large comment:
    * Compute the current speed.
-   *
-   * accelerationDurationMs is the acceleration endpoint:
-   * - before endpoint: speed changes according to acceleration settings
-   * - after endpoint: speed remains steady at the endpoint speed
-   *
-   * This is intentionally separate from durationMs, which controls total effect
-   * lifetime.
    */
   if (state.accelerationMode === ACCEL_NONE) {
     return state.startSpeedPxPerSec;
@@ -1134,9 +1068,6 @@ function normaliseTickerDeltaMs(deltaMS) {
   /**
    * Large comment:
    * Be tolerant of ticker utility behaviour.
-   *
-   * FX Bus ticker helpers usually pass deltaMS. If a raw PIXI delta slips
-   * through, clamp to a sane frame interval rather than generating huge jumps.
    */
   const n = Number(deltaMS);
 
@@ -1162,8 +1093,8 @@ function updateRunningState(runtime, tileId, state, deltaMS) {
 
   const velocity = velocityVector(state);
 
-  state.tilePositionX += velocity.x * dtSec;
-  state.tilePositionY += velocity.y * dtSec;
+  state.tilePositionX = wrapPhasePx(state.tilePositionX + (velocity.x * dtSec));
+  state.tilePositionY = wrapPhasePx(state.tilePositionY + (velocity.y * dtSec));
   state.currentSpeedPxPerSec = velocity.speed;
 
   setSpriteTilePosition(state);
@@ -1203,6 +1134,9 @@ function resetState(_runtime, _tileId, state) {
    */
   if (!state) return;
 
+  state.tilePositionX = 0;
+  state.tilePositionY = 0;
+
   destroyOverlay(state);
 }
 
@@ -1240,8 +1174,9 @@ function updateExistingState(runtime, tileId, state, params) {
    * Large comment:
    * Restart or update an existing Tile Flow state.
    *
-   * Retained tilePosition offsets are preserved. This means a retained flow can
-   * resume from its current visual phase.
+   * Retained tilePosition offsets are preserved, but kept wrapped. This means a
+   * retained flow can resume from its current visual phase without unbounded
+   * numeric growth.
    */
   state.angleDeg = params.angleDeg;
   state.startSpeedPxPerSec = params.startSpeedPxPerSec;
@@ -1258,6 +1193,9 @@ function updateExistingState(runtime, tileId, state, params) {
   state.elapsedMs = 0;
   state.currentSpeedPxPerSec = params.startSpeedPxPerSec;
   state.status = STATUS_RUNNING;
+
+  state.tilePositionX = wrapPhasePx(state.tilePositionX);
+  state.tilePositionY = wrapPhasePx(state.tilePositionY);
 
   if (!syncOverlayToTile(state)) {
     resetState(runtime, tileId, state);
@@ -1363,7 +1301,10 @@ function startOrUpdate(runtime, payload) {
 function stop(runtime, payload) {
   const map = getTileMap(runtime);
   const tileIds = normaliseTileIds(payload);
-  const mode = normaliseMode(payload?.stopMode ?? payload?.mode, MODE_RESET);
+  const forceReset = payload?.forceReset === true || payload?.reset === true;
+  const mode = forceReset
+    ? MODE_RESET
+    : normaliseMode(payload?.stopMode ?? payload?.mode, MODE_RESET);
 
   const idsToStop = tileIds.length > 0
     ? tileIds
@@ -1374,7 +1315,10 @@ function stop(runtime, payload) {
     if (!state) continue;
 
     if (mode === MODE_RETAIN) {
+      state.tilePositionX = wrapPhasePx(state.tilePositionX);
+      state.tilePositionY = wrapPhasePx(state.tilePositionY);
       state.status = STATUS_HELD;
+      setSpriteTilePosition(state);
       continue;
     }
 

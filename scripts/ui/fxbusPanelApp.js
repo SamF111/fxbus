@@ -207,7 +207,7 @@ function buildGroups() {
       label: "Token",
       tabs: [
         tokenOsc,
-        relabelTab(tokenLaser, "Tether"),
+        relabelTab(tokenLaser, "Token Tether"),
         tokenRecoil
       ]
     },

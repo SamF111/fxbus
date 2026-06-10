@@ -9,6 +9,7 @@
  * Mechanism:
  * - Dispatch each effect's STOP action so that it can restore its own snapshots.
  * - Dispatch hard-reset handlers where available for defensive orphan cleanup.
+ * - Force reset-capable effects to reset rather than retain.
  * - Then hard-clean tickers and residual maps as a backstop.
  *
  * Assumptions:
@@ -35,6 +36,7 @@ const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
 const TILE_OSC_STOP_LEGACY = "tileOscStop";
 const TILE_FLICKER_STOP = "fx.tileFlicker.stop";
+const TILE_FLOW_STOP = "fx.tileFlow.stop";
 
 // Screen stop actions
 const SCREEN_SHAKE_STOP = "fx.screenShake.stop";
@@ -192,6 +194,44 @@ function clearMapLike(value) {
   }
 }
 
+function buildForcedTileResetPayload(action, tileIds) {
+  /**
+   * Large comment:
+   * Build a tile reset payload that explicitly overrides retain behaviour.
+   *
+   * Tile Flow supports stopMode. A normal user stop may intentionally retain the
+   * current flow phase. Global reset must not retain anything, so it always sends
+   * stopMode "reset" and forceReset true.
+   */
+  const payload = {
+    action,
+    stopMode: "reset",
+    forceReset: true
+  };
+
+  if (Array.isArray(tileIds) && tileIds.length > 0) {
+    payload.tileIds = tileIds;
+  }
+
+  return payload;
+}
+
+function buildForcedScreenResetPayload(action) {
+  /**
+   * Large comment:
+   * Build a screen reset payload that asks effects to restore their baseline
+   * immediately where supported.
+   *
+   * Unsupported properties are harmless for existing handlers.
+   */
+  return {
+    action,
+    reset: true,
+    forceReset: true,
+    immediate: true
+  };
+}
+
 function onReset(runtime) {
   /**
    * Large comment:
@@ -200,9 +240,10 @@ function onReset(runtime) {
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
    * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
    * 3. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
-   * 4. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
-   * 5. Remove any residual tickers.
-   * 6. Clear runtime maps as a final backstop.
+   * 4. Force Tile Flow to reset rather than retain final phase.
+   * 5. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
+   * 6. Remove any residual tickers.
+   * 7. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
 
@@ -260,6 +301,14 @@ function onReset(runtime) {
         tileIds
       });
     }
+
+    if (hasHandler(runtime, TILE_FLOW_STOP)) {
+      safeCallHandler(
+        runtime,
+        TILE_FLOW_STOP,
+        buildForcedTileResetPayload(TILE_FLOW_STOP, tileIds)
+      );
+    }
   } else {
     stopIfPresent(runtime, TILE_OSC_STOP, {
       action: TILE_OSC_STOP
@@ -268,22 +317,29 @@ function onReset(runtime) {
     stopIfPresent(runtime, TILE_FLICKER_STOP, {
       action: TILE_FLICKER_STOP
     });
+
+    stopIfPresent(
+      runtime,
+      TILE_FLOW_STOP,
+      buildForcedTileResetPayload(TILE_FLOW_STOP)
+    );
   }
 
-  stopIfPresent(runtime, SCREEN_SHAKE_STOP);
-  stopIfPresent(runtime, SCREEN_ROTATE_STOP);
-  stopIfPresent(runtime, SCREEN_PULSE_STOP);
-  stopIfPresent(runtime, SCREEN_VIGNETTE_STOP);
-  stopIfPresent(runtime, CHROM_AB_STOP);
-  stopIfPresent(runtime, NOISE_STOP);
-  stopIfPresent(runtime, SCREEN_BLUR_STOP);
-  stopIfPresent(runtime, SCREEN_SMEAR_STOP);
-  stopIfPresent(runtime, SCREEN_STREAK_STOP);
-  stopIfPresent(runtime, SCREEN_COLOUR_SHIFT_STOP);
+  stopIfPresent(runtime, SCREEN_SHAKE_STOP, buildForcedScreenResetPayload(SCREEN_SHAKE_STOP));
+  stopIfPresent(runtime, SCREEN_ROTATE_STOP, buildForcedScreenResetPayload(SCREEN_ROTATE_STOP));
+  stopIfPresent(runtime, SCREEN_PULSE_STOP, buildForcedScreenResetPayload(SCREEN_PULSE_STOP));
+  stopIfPresent(runtime, SCREEN_VIGNETTE_STOP, buildForcedScreenResetPayload(SCREEN_VIGNETTE_STOP));
+  stopIfPresent(runtime, CHROM_AB_STOP, buildForcedScreenResetPayload(CHROM_AB_STOP));
+  stopIfPresent(runtime, NOISE_STOP, buildForcedScreenResetPayload(NOISE_STOP));
+  stopIfPresent(runtime, SCREEN_BLUR_STOP, buildForcedScreenResetPayload(SCREEN_BLUR_STOP));
+  stopIfPresent(runtime, SCREEN_SMEAR_STOP, buildForcedScreenResetPayload(SCREEN_SMEAR_STOP));
+  stopIfPresent(runtime, SCREEN_STREAK_STOP, buildForcedScreenResetPayload(SCREEN_STREAK_STOP));
+  stopIfPresent(runtime, SCREEN_COLOUR_SHIFT_STOP, buildForcedScreenResetPayload(SCREEN_COLOUR_SHIFT_STOP));
 
   stopIfPresent(runtime, SCREEN_MONOCHROME_STOP, {
     action: SCREEN_MONOCHROME_STOP,
-    immediate: true
+    immediate: true,
+    forceReset: true
   });
 
   backstopTickerCleanup(runtime);
