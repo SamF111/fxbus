@@ -1,0 +1,156 @@
+name: Draft Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version. Leave blank to use module.json version."
+        required: false
+        type: string
+      prerelease:
+        description: "Mark the draft as a pre-release"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  draft-release:
+    name: Build and draft GitHub release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read release metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MODULE_ID="$(jq -r '.id' module.json)"
+          MODULE_VERSION="$(jq -r '.version' module.json)"
+          INPUT_VERSION="${{ inputs.version }}"
+
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="$MODULE_VERSION"
+          fi
+
+          VERSION="${VERSION#v}"
+          TAG="v${VERSION}"
+          ZIP_NAME="${MODULE_ID}-${VERSION}.zip"
+
+          if [ "$VERSION" != "$MODULE_VERSION" ]; then
+            echo "::error::Requested version ${VERSION} does not match module.json version ${MODULE_VERSION}."
+            echo "::error::Update module.json first, or leave the version input blank."
+            exit 1
+          fi
+
+          echo "module_id=${MODULE_ID}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "zip_name=${ZIP_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Prevent duplicate tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.meta.outputs.tag }}"
+
+          git fetch --tags
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists. Delete the tag or bump module.json version."
+            exit 1
+          fi
+
+      - name: Rewrite release URLs in module.json
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.meta.outputs.tag }}"
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+          REPO="${{ github.repository }}"
+
+          MANIFEST_URL="https://github.com/${REPO}/releases/latest/download/module.json"
+          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ZIP_NAME}"
+
+          jq \
+            --arg manifest "$MANIFEST_URL" \
+            --arg download "$DOWNLOAD_URL" \
+            '.manifest = $manifest | .download = $download' \
+            module.json > module.json.tmp
+
+          mv module.json.tmp module.json
+
+          jq . module.json
+
+      - name: Build module zip
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+
+          rm -f "$ZIP_NAME"
+
+          zip -r "$ZIP_NAME" \
+            module.json \
+            README.md \
+            LICENSE \
+            assets \
+            scripts \
+            styles \
+            templates \
+            -x "*.git*" \
+            -x "*.github*"
+
+          unzip -l "$ZIP_NAME"
+
+      - name: Create git tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.meta.outputs.tag }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git tag -a "$TAG" -m "Release ${TAG}"
+          git push origin "$TAG"
+
+      - name: Create draft GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          TAG="${{ steps.meta.outputs.tag }}"
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+          PRERELEASE="${{ inputs.prerelease }}"
+
+          RELEASE_ARGS=(
+            "$TAG"
+            "module.json"
+            "$ZIP_NAME"
+            --draft
+            --title "FX Bus ${TAG}"
+            --notes "Draft release for FX Bus ${TAG}."
+          )
+
+          if [ "$PRERELEASE" = "true" ]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          gh release create "${RELEASE_ARGS[@]}"
