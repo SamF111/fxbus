@@ -26,38 +26,34 @@
  * - Runs entirely client-side.
  * - Does not update Tile documents.
  * - Does not call tile.control(), tile.release(), or inspect tile.controlled.
- * - Does not animate Foundry's managed tile.mesh.
- * - Does not reparent tile.mesh.
- * - Does not wrap tile.mesh.
- * - Creates an FX-owned normal PIXI.Sprite clone from the tile mesh texture.
- * - Adds the clone as a direct child of the same parent as tile.mesh.
- * - Hides the original managed tile mesh while the clone represents it.
- * - Animates only the clone.
- * - Manually approximates foreground/overhead fade for animated clones.
- * - Restores the original tile mesh display state on stop.
+ * - Does not create clones.
+ * - Does not reparent tile render objects.
+ * - Does not hide managed tile meshes.
+ * - Animates only the local visible tile render object transform.
+ * - Rebases when the TileDocument position, size, or rotation changes.
+ * - Restores the original transform exactly on stop/reset where the target object
+ *   still exists.
  *
- * Reason:
- * - In Foundry v13, Tile meshes are PrimarySpriteMesh instances using the
- *   PrimaryCanvasGroup / batchOcclusion rendering path.
- * - Reparenting PrimaryCanvasObject instances is invalid.
- * - Mutating tile.mesh transforms every ticker can collide with Foundry render
- *   flags and Tile._refreshState.
- * - Shader-uniform and geometry-buffer attempts do not move this render path
- *   reliably.
- * - Clone rendering is the reliable visual-only path. Foreground fade is
- *   approximated manually because clones are not native occlusion meshes.
+ * Composition:
+ * - If Tile Flow owns the visible representation, oscillate the Tile Flow container.
+ * - Otherwise oscillate the managed tile render object.
+ *
+ * Lifecycle safety:
+ * - Tile Flow may destroy its overlay while Tile Oscillation still has a reference
+ *   to it, especially during manual testing or poorly ordered reset.
+ * - This file must never write transforms to destroyed display objects.
+ * - If the visible object changes, Oscillation rebases onto the new live object.
  */
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
 import { clamp, degToRad } from "../utils.js";
+import { getTileFlowVisualObject } from "./tileFlowFx.js";
 
 const EFFECT_NAME = "tileOscillation";
 
 const ACTION_START = "fx.tileOscillation.start";
 const ACTION_STOP = "fx.tileOscillation.stop";
 const ACTION_UPDATE = "fx.tileOscillation.update";
-
-const DEFAULT_FOREGROUND_FADE_ALPHA = 0.25;
 
 function getTileMap(runtime) {
   /**
@@ -84,41 +80,50 @@ function getTileById(tileId) {
   return canvas.tiles.placeables.find((tile) => tile.id === tileId) ?? null;
 }
 
-function getTileMesh(tile) {
+function getTileRenderObject(tile) {
   /**
    * Large comment:
-   * Resolve Foundry's managed tile mesh.
+   * Resolve the Foundry-managed tile render object.
    *
-   * The mesh is used as a source for texture, visual state, and parent only.
-   * FX Bus does not animate or reparent it.
+   * Foundry v13+ commonly exposes tile.mesh. Older versions exposed tile.tile.
+   * FX Bus mutates this object locally only and restores the original transform
+   * on stop/reset. TileDocument data is never changed.
    */
-  if (!tile?.mesh) return null;
+  if (!tile) return null;
+  if (tile.mesh) return tile.mesh;
+  if (tile.tile) return tile.tile;
 
-  return tile.mesh;
+  return null;
 }
 
-function getTextureFromMesh(mesh) {
+function isLiveDisplayObject(obj) {
   /**
    * Large comment:
-   * Resolve the texture used by Foundry's tile mesh.
+   * Determine whether a PIXI display object is still safe to mutate.
    *
-   * Foundry tile meshes normally expose texture directly. Some PIXI variants may
-   * expose it through material.texture.
+   * A destroyed object may still be referenced by FX state, but PIXI can null
+   * internal transform fields. Writing x/y/rotation to that object can then throw.
    */
-  return mesh?.texture ?? mesh?.material?.texture ?? null;
+  if (!obj) return false;
+  if (obj.destroyed) return false;
+  if (!obj.transform) return false;
+
+  return true;
 }
 
-function getCloneParent(mesh) {
+function getVisibleTileObject(runtime, tileId, tile) {
   /**
    * Large comment:
-   * Resolve a legal parent for the FX clone.
+   * Resolve the object that is currently visible for this tile.
    *
-   * The clone is a normal PIXI.Sprite, not a PrimaryCanvasObject. It may be added
-   * as a direct child of the same parent as the tile mesh. Do not create a wrapper
-   * around tile.mesh and do not move tile.mesh.
+   * If Tile Flow is running or retained, the visible representation is Tile Flow's
+   * container. In that case, oscillation must target the container.
    */
-  if (mesh?.parent?.addChild) return mesh.parent;
-  if (canvas?.primary?.addChild) return canvas.primary;
+  const flowObject = getTileFlowVisualObject(runtime, tileId);
+  if (isLiveDisplayObject(flowObject)) return flowObject;
+
+  const tileObject = getTileRenderObject(tile);
+  if (isLiveDisplayObject(tileObject)) return tileObject;
 
   return null;
 }
@@ -144,12 +149,7 @@ function buildParams(payload) {
     bobPx: clamp(Number(payload?.bobPx ?? 0), -200, 200),
     scaleAmp: clamp(Number(payload?.scalePct ?? 0), -50, 50) / 100,
     freqHz: clamp(Number(payload?.freqHz ?? 0.35), 0.01, 10),
-    randomPhase: payload?.randomPhase !== false,
-    foregroundFadeAlpha: clamp(
-      Number(payload?.foregroundFadeAlpha ?? DEFAULT_FOREGROUND_FADE_ALPHA),
-      0,
-      1
-    )
+    randomPhase: payload?.randomPhase !== false
   };
 }
 
@@ -166,12 +166,70 @@ function phaseFromId(id) {
   return normalised * Math.PI * 2;
 }
 
-function getTileDocumentBounds(tile) {
+function snapshotTileTransform(obj) {
   /**
    * Large comment:
-   * Return the current document-space rectangle for a tile.
+   * Snapshot the render object's local transform exactly enough for restoration.
    *
-   * This is the stable source of truth for positioning a plain PIXI.Sprite clone.
+   * This snapshot is local-only render state. It is not TileDocument data.
+   */
+  if (!isLiveDisplayObject(obj)) return null;
+
+  return {
+    x: obj.x,
+    y: obj.y,
+    rotation: obj.rotation,
+    scaleX: obj.scale?.x ?? 1,
+    scaleY: obj.scale?.y ?? 1,
+    pivotX: obj.pivot?.x ?? 0,
+    pivotY: obj.pivot?.y ?? 0,
+    skewX: obj.skew?.x ?? 0,
+    skewY: obj.skew?.y ?? 0
+  };
+}
+
+function restoreTileTransform(obj, snapshot) {
+  /**
+   * Large comment:
+   * Restore the tile render object's transform exactly.
+   *
+   * This is deliberately defensive. If Tile Flow has already destroyed its
+   * overlay, old Oscillation state may still point at that destroyed container.
+   * In that case, do nothing instead of writing into a dead PIXI transform.
+   */
+  if (!isLiveDisplayObject(obj) || !snapshot) return false;
+
+  try {
+    obj.x = snapshot.x;
+    obj.y = snapshot.y;
+    obj.rotation = snapshot.rotation;
+
+    if (obj.scale) {
+      obj.scale.set(snapshot.scaleX, snapshot.scaleY);
+    }
+
+    if (obj.pivot) {
+      obj.pivot.set(snapshot.pivotX, snapshot.pivotY);
+    }
+
+    if (obj.skew) {
+      obj.skew.set(snapshot.skewX ?? 0, snapshot.skewY ?? 0);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("[FX Bus] Tile Osc: skipped transform restore for invalid display object.", err);
+    return false;
+  }
+}
+
+function snapshotTileDocumentState(tile) {
+  /**
+   * Large comment:
+   * Snapshot the TileDocument placement fields used to detect external tile
+   * movement, resizing, or rotation while FX Bus is animating the render object.
+   *
+   * This is read-only. It does not mutate the document.
    */
   const doc = tile?.document;
   if (!doc) return null;
@@ -180,574 +238,132 @@ function getTileDocumentBounds(tile) {
   const y = Number(doc.y);
   const width = Number(doc.width);
   const height = Number(doc.height);
+  const rotation = Number(doc.rotation ?? 0);
 
-  if (![x, y, width, height].every(Number.isFinite)) return null;
+  if (![x, y, width, height, rotation].every(Number.isFinite)) return null;
 
   return {
     x,
     y,
     width,
     height,
-    centreX: x + (width / 2),
-    centreY: y + (height / 2)
+    rotation
   };
 }
 
-function snapshotMeshDisplayState(mesh) {
-  /**
-   * Large comment:
-   * Capture the original display state of the managed Foundry tile mesh.
-   *
-   * This state is restored exactly on stop. The clone should not copy visibility
-   * from the mesh after the mesh has been hidden, because that would make the
-   * clone invisible too.
-   */
-  return {
-    visible: mesh.visible,
-    renderable: mesh.renderable,
-    alpha: mesh.alpha,
-    zIndex: mesh.zIndex,
-    blendMode: mesh.blendMode,
-    tint: typeof mesh.tint === "number" ? mesh.tint : null,
-    filters: mesh.filters,
-    cullable: mesh.cullable
-  };
-}
-
-function restoreMeshDisplayState(mesh, original) {
-  if (!mesh || !original) return;
-
-  mesh.visible = original.visible;
-  mesh.renderable = original.renderable;
-  mesh.alpha = original.alpha;
-
-  if (original.zIndex !== undefined) {
-    mesh.zIndex = original.zIndex;
-  }
-
-  if (original.blendMode !== undefined) {
-    mesh.blendMode = original.blendMode;
-  }
-
-  if (typeof original.tint === "number") {
-    try {
-      mesh.tint = original.tint;
-    } catch {
-      // ignore
-    }
-  }
-
-  if (original.filters !== undefined) {
-    try {
-      mesh.filters = original.filters;
-    } catch {
-      // ignore
-    }
-  }
-
-  if (original.cullable !== undefined) {
-    try {
-      mesh.cullable = original.cullable;
-    } catch {
-      // ignore
-    }
-  }
-}
-
-function hideManagedMesh(mesh) {
-  /**
-   * Large comment:
-   * Hide the original Foundry-managed mesh while the FX clone represents it.
-   *
-   * This is a display-state change only. The mesh is not moved, reparented, or
-   * animated.
-   */
-  if (!mesh) return;
-
-  mesh.visible = false;
-}
-
-function copyStableVisualStateToClone(mesh, clone, original) {
-  /**
-   * Large comment:
-   * Copy stable visual appearance to the clone.
-   *
-   * This is used at clone creation. It deliberately uses the original mesh state
-   * captured before FX Bus hid the managed mesh.
-   */
-  if (!mesh || !clone) return;
-
-  clone.visible = original?.visible !== false;
-  clone.renderable = original?.renderable !== false;
-  clone.alpha = Number.isFinite(original?.alpha) ? original.alpha : 1;
-
-  if (typeof original?.tint === "number") {
-    clone.tint = original.tint;
-  } else if (typeof mesh.tint === "number") {
-    clone.tint = mesh.tint;
-  }
-
-  if (original?.blendMode !== undefined) {
-    clone.blendMode = original.blendMode;
-  } else if (mesh.blendMode !== undefined) {
-    clone.blendMode = mesh.blendMode;
-  }
-
-  if (original?.filters !== undefined) {
-    clone.filters = Array.isArray(original.filters)
-      ? [...original.filters]
-      : original.filters;
-  }
-
-  if (mesh.zIndex !== undefined) {
-    clone.zIndex = mesh.zIndex;
-  }
-
-  clone.cullable = mesh.cullable === true;
-}
-
-function getTileDocumentRotationRad(tile) {
-  const rotationDeg = Number(tile?.document?.rotation ?? 0);
-
-  return degToRad(Number.isFinite(rotationDeg) ? rotationDeg : 0);
-}
-
-function copyMeshTransformToClone(tile, mesh, clone) {
-  /**
-   * Large comment:
-   * Copy the tile's document-space visual rectangle to the FX clone.
-   *
-   * A Foundry Tile mesh is not geometrically equivalent to a plain PIXI.Sprite.
-   * Copying mesh.x/y/scale directly causes the clone to appear offset or at the
-   * wrong size. The document rectangle is the stable source of truth for where
-   * the tile should appear on the canvas.
-   */
-  if (!tile?.document || !mesh || !clone) return null;
-
-  const bounds = getTileDocumentBounds(tile);
-  if (!bounds) return null;
-
-  clone.anchor.set(0.5, 0.5);
-
-  clone.x = bounds.centreX;
-  clone.y = bounds.centreY;
-  clone.rotation = getTileDocumentRotationRad(tile);
-
-  clone.width = Math.abs(bounds.width);
-  clone.height = Math.abs(bounds.height);
-
-  if (clone.pivot) {
-    clone.pivot.set(0, 0);
-  }
-
-  if (clone.skew) {
-    clone.skew.set(0, 0);
-  }
-
-  return {
-    x: clone.x,
-    y: clone.y,
-    rotation: clone.rotation,
-    scaleX: clone.scale.x,
-    scaleY: clone.scale.y,
-    pivotX: clone.pivot?.x ?? 0,
-    pivotY: clone.pivot?.y ?? 0,
-    skewX: clone.skew?.x ?? 0,
-    skewY: clone.skew?.y ?? 0
-  };
-}
-
-function createCloneFromMesh(tile, mesh, texture, parent, original) {
-  /**
-   * Large comment:
-   * Create a normal PIXI.Sprite clone for the tile texture.
-   *
-   * This intentionally does not clone or move the Foundry PrimarySpriteMesh.
-   * The clone is ordinary PIXI and FX-owned.
-   */
-  const clone = new PIXI.Sprite(texture);
-
-  clone.name = `fxbus-tileOscillation-${tile.id}`;
-  clone.eventMode = "none";
-  clone.interactive = false;
-  clone.interactiveChildren = false;
-  clone.sortableChildren = false;
-
-  if (clone.anchor) {
-    clone.anchor.set(0);
-  }
-
-  copyStableVisualStateToClone(mesh, clone, original);
-  const base = copyMeshTransformToClone(tile, mesh, clone);
-
-  if (!base) {
-    clone.destroy?.();
-    return null;
-  }
-
-  try {
-    parent.addChild(clone);
-  } catch (err) {
-    console.warn("[FX Bus] Tile Osc: failed to add FX clone.", {
-      tileId: tile.id,
-      err
-    });
-    clone.destroy?.();
-    return null;
-  }
-
-  return {
-    clone,
-    base
-  };
-}
-
-function createTileFxClone(tile) {
-  /**
-   * Large comment:
-   * Create an isolated FX clone for a Foundry tile.
-   *
-   * The managed mesh remains in its legal Foundry parent. FX Bus only hides it
-   * and adds a separate normal PIXI.Sprite clone to the same parent.
-   */
-  const mesh = getTileMesh(tile);
-  const texture = getTextureFromMesh(mesh);
-  const parent = getCloneParent(mesh);
-
-  if (!mesh || !texture || !parent) {
-    console.warn("[FX Bus] Tile Osc: cannot create clone.", {
-      tileId: tile?.id,
-      hasMesh: Boolean(mesh),
-      hasTexture: Boolean(texture),
-      hasParent: Boolean(parent)
-    });
-    return null;
-  }
-
-  const original = snapshotMeshDisplayState(mesh);
-  const cloneState = createCloneFromMesh(tile, mesh, texture, parent, original);
-
-  if (!cloneState) return null;
-
-  hideManagedMesh(mesh);
-
-  return {
-    tileId: tile.id,
-    mesh,
-    clone: cloneState.clone,
-    parent,
-    original,
-    base: cloneState.base,
-    applied: {
-      x: 0,
-      y: 0,
-      rotation: 0,
-      scaleMul: 1
-    }
-  };
-}
-
-function destroyTileFxClone(state) {
-  /**
-   * Large comment:
-   * Destroy the FX clone and restore the original managed tile mesh display
-   * state.
-   *
-   * No transform restore is required because the original tile mesh was never
-   * animated by FX Bus.
-   */
-  if (!state) return;
-
-  restoreMeshDisplayState(state.mesh, state.original);
-
-  try {
-    if (state.clone?.parent) {
-      state.clone.parent.removeChild(state.clone);
-    }
-  } catch {
-    // ignore
-  }
-
-  try {
-    state.clone?.destroy?.({ children: true });
-  } catch {
-    try {
-      state.clone?.destroy?.();
-    } catch {
-      // ignore
-    }
-  }
-
-  state.clone = null;
-  state.mesh = null;
-  state.parent = null;
-}
-
-function ensureCloneStillValid(tileId, state) {
-  /**
-   * Large comment:
-   * Check whether the FX clone and source mesh are still usable.
-   *
-   * If Foundry has redrawn the scene and replaced the tile mesh, rebuild the
-   * clone from the current tile.
-   */
-  const tile = getTileById(tileId);
-  const mesh = getTileMesh(tile);
-
-  if (!tile || !mesh) return false;
-
-  const sameMesh = state?.mesh === mesh;
-  const cloneOk = state?.clone && !state.clone.destroyed;
-
-  if (sameMesh && cloneOk) return true;
-
-  destroyTileFxClone(state);
-
-  const rebuilt = createTileFxClone(tile);
-  if (!rebuilt) return false;
-
-  state.mesh = rebuilt.mesh;
-  state.clone = rebuilt.clone;
-  state.parent = rebuilt.parent;
-  state.original = rebuilt.original;
-  state.base = rebuilt.base;
-  state.applied = rebuilt.applied;
-
-  return true;
-}
-
-function getTokenCentre(token) {
-  /**
-   * Large comment:
-   * Return a token centre point in scene coordinates.
-   *
-   * Foundry tokens expose both document coordinates and placeable dimensions.
-   * Use the placeable dimensions where available because they reflect current
-   * canvas state.
-   */
-  if (!token) return null;
-
-  const x = Number(token.x ?? token.document?.x);
-  const y = Number(token.y ?? token.document?.y);
-  const width = Number(token.w ?? token.width ?? token.document?.width ?? 0);
-  const height = Number(token.h ?? token.height ?? token.document?.height ?? 0);
-
-  if (![x, y, width, height].every(Number.isFinite)) return null;
-
-  return {
-    x: x + (width / 2),
-    y: y + (height / 2)
-  };
-}
-
-function pointInTileBounds(tile, point) {
-  /**
-   * Large comment:
-   * Conservative point-in-tile test using the tile document rectangle.
-   *
-   * This intentionally ignores rotation. For foreground fade this is preferable
-   * to missing fades on irregular or rotated decorative tiles.
-   */
-  if (!point) return false;
-
-  const bounds = getTileDocumentBounds(tile);
-  if (!bounds) return false;
+function sameTileDocumentState(a, b) {
+  if (!a || !b) return false;
 
   return (
-    point.x >= bounds.x &&
-    point.x <= bounds.x + bounds.width &&
-    point.y >= bounds.y &&
-    point.y <= bounds.y + bounds.height
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.rotation === b.rotation
   );
 }
 
-function isForegroundOrOverheadTile(tile) {
+function applyDocumentDeltaToSnapshot(snapshot, previousDocumentState, currentDocumentState) {
   /**
    * Large comment:
-   * Identify tiles likely to need foreground fade approximation.
+   * Derive a new transform baseline from TileDocument movement.
    *
-   * Foundry tile document fields can vary by version and module. The checks are
-   * deliberately broad and conservative:
-   * - overhead true
-   * - roof true
-   * - occlusion mode non-zero / non-none
-   * - elevation above zero
+   * The render object cannot be trusted as the new baseline while FX Bus is
+   * actively animating it, because the ticker has been writing base + offset
+   * every frame. Therefore document movement must be applied as a delta to the
+   * previous original snapshot.
    */
-  const doc = tile?.document;
-  if (!doc) return false;
+  if (!snapshot || !previousDocumentState || !currentDocumentState) return null;
 
-  if (doc.overhead === true) return true;
-  if (doc.roof === true) return true;
+  const dx = currentDocumentState.x - previousDocumentState.x;
+  const dy = currentDocumentState.y - previousDocumentState.y;
+  const dRotationRad = degToRad(currentDocumentState.rotation - previousDocumentState.rotation);
 
-  const occlusionMode = doc.occlusion?.mode;
-  if (typeof occlusionMode === "number" && occlusionMode !== 0) return true;
-  if (typeof occlusionMode === "string" && occlusionMode !== "" && occlusionMode !== "none") return true;
+  const previousWidth = previousDocumentState.width;
+  const previousHeight = previousDocumentState.height;
+  const currentWidth = currentDocumentState.width;
+  const currentHeight = currentDocumentState.height;
 
-  const elevation = Number(doc.elevation ?? 0);
-  if (Number.isFinite(elevation) && elevation > 0) return true;
-
-  return false;
-}
-
-function getHoveredToken() {
-  /**
-   * Large comment:
-   * Return the currently hovered token where Foundry exposes one.
-   *
-   * The exact hovered object field varies between versions/modules, so check
-   * common places and fall back safely.
-   */
-  const hovered = canvas?.tokens?.hover;
-
-  if (hovered) return hovered;
-
-  return canvas?.tokens?.placeables?.find((token) => token.hover === true) ?? null;
-}
-
-function getRelevantTokensForManualFade() {
-  /**
-   * Large comment:
-   * Return tokens that should trigger manual foreground fade.
-   *
-   * Priority:
-   * - controlled tokens
-   * - hovered token
-   * - current user's assigned character token on the active scene, if present
-   *
-   * This approximates the useful player-facing behaviour without depending on
-   * Foundry's internal occlusion shader path.
-   */
-  const tokens = new Set();
-
-  for (const token of canvas?.tokens?.controlled ?? []) {
-    tokens.add(token);
-  }
-
-  const hovered = getHoveredToken();
-  if (hovered) tokens.add(hovered);
-
-  const character = game?.user?.character;
-  if (character) {
-    for (const token of canvas?.tokens?.placeables ?? []) {
-      if (token.actor?.id === character.id) {
-        tokens.add(token);
-      }
-    }
-  }
-
-  return Array.from(tokens);
-}
-
-function shouldManuallyFadeClone(tile) {
-  /**
-   * Large comment:
-   * Decide whether an animated tile clone should be faded.
-   *
-   * Only foreground/overhead-like tiles fade. The fade is triggered when a
-   * relevant token centre sits inside the tile document rectangle.
-   */
-  if (!isForegroundOrOverheadTile(tile)) return false;
-
-  const tokens = getRelevantTokensForManualFade();
-
-  return tokens.some((token) => pointInTileBounds(tile, getTokenCentre(token)));
-}
-
-function copyDynamicVisualStateToClone(tile, mesh, clone, original, foregroundFadeAlpha) {
-  /**
-   * Large comment:
-   * Mirror safe dynamic visual state to the FX clone.
-   *
-   * Do not copy mesh.visible. FX Bus intentionally sets mesh.visible = false.
-   * Copying that would make the clone invisible too.
-   *
-   * The manual foreground fade is applied on top of the original/source alpha.
-   */
-  if (!tile || !mesh || !clone) return;
-
-  clone.visible = original?.visible !== false;
-  clone.renderable = original?.renderable !== false;
-
-  const sourceAlpha = Number(mesh.alpha);
-  const originalAlpha = Number(original?.alpha);
-
-  const baseAlpha = Number.isFinite(sourceAlpha)
-    ? sourceAlpha
-    : Number.isFinite(originalAlpha)
-      ? originalAlpha
+  const scaleXMul =
+    Number.isFinite(previousWidth) && previousWidth !== 0 && Number.isFinite(currentWidth)
+      ? currentWidth / previousWidth
       : 1;
 
-  const shouldFade = shouldManuallyFadeClone(tile);
-  const fadeAlpha = Number.isFinite(foregroundFadeAlpha)
-    ? foregroundFadeAlpha
-    : DEFAULT_FOREGROUND_FADE_ALPHA;
+  const scaleYMul =
+    Number.isFinite(previousHeight) && previousHeight !== 0 && Number.isFinite(currentHeight)
+      ? currentHeight / previousHeight
+      : 1;
 
-  clone.alpha = shouldFade
-    ? Math.min(baseAlpha, fadeAlpha)
-    : baseAlpha;
-
-  if (typeof mesh.tint === "number") {
-    clone.tint = mesh.tint;
-  } else if (typeof original?.tint === "number") {
-    clone.tint = original.tint;
-  }
-
-  if (mesh.blendMode !== undefined) {
-    clone.blendMode = mesh.blendMode;
-  } else if (original?.blendMode !== undefined) {
-    clone.blendMode = original.blendMode;
-  }
-
-  if (mesh.filters !== undefined) {
-    clone.filters = Array.isArray(mesh.filters)
-      ? [...mesh.filters]
-      : mesh.filters;
-  } else if (original?.filters !== undefined) {
-    clone.filters = Array.isArray(original.filters)
-      ? [...original.filters]
-      : original.filters;
-  }
-
-  if (mesh.zIndex !== undefined) {
-    clone.zIndex = mesh.zIndex;
-  }
-
-  clone.cullable = mesh.cullable === true;
+  return {
+    ...snapshot,
+    x: snapshot.x + dx,
+    y: snapshot.y + dy,
+    rotation: snapshot.rotation + dRotationRad,
+    scaleX: snapshot.scaleX * scaleXMul,
+    scaleY: snapshot.scaleY * scaleYMul
+  };
 }
 
-function syncCloneBaseFromMesh(state) {
+function rebaseTileOscillationState(runtime, state) {
   /**
    * Large comment:
-   * Read the current Tile document rectangle and copy it to the clone as the
-   * base transform.
+   * Rebase oscillation after Foundry moves, resizes, rotates, redraws the tile,
+   * or Tile Flow takes over/releases the visible representation.
    *
-   * Do not copy raw mesh transform onto a plain Sprite. The Foundry tile mesh
-   * and a PIXI.Sprite do not share equivalent local geometry.
+   * Important:
+   * - If the old object is destroyed, do not restore it.
+   * - If the new visible object is live, snapshot that new object and continue.
+   * - This allows bad stop order to recover rather than crashing the ticker.
    */
-  if (!state?.mesh || !state?.clone) return null;
-
   const tile = getTileById(state.tileId);
-  if (!tile) return null;
+  const object = getVisibleTileObject(runtime, state.tileId, tile);
 
-  const base = copyMeshTransformToClone(tile, state.mesh, state.clone);
+  if (!tile || !object) return false;
 
-  copyDynamicVisualStateToClone(
-    tile,
-    state.mesh,
-    state.clone,
+  const currentDocumentState = snapshotTileDocumentState(tile);
+  if (!currentDocumentState) return false;
+
+  const previousObject = state.object;
+  const objectChanged = previousObject !== object || !isLiveDisplayObject(previousObject);
+
+  if (objectChanged) {
+    restoreTileTransform(previousObject, state.original);
+
+    const nextSnapshot = snapshotTileTransform(object);
+    if (!nextSnapshot) return false;
+
+    state.tile = tile;
+    state.object = object;
+    state.original = nextSnapshot;
+    state.base = { ...nextSnapshot };
+    state.documentState = currentDocumentState;
+
+    return true;
+  }
+
+  const nextOriginal = applyDocumentDeltaToSnapshot(
     state.original,
-    state.foregroundFadeAlpha
+    state.documentState,
+    currentDocumentState
   );
 
-  hideManagedMesh(state.mesh);
+  if (!nextOriginal) return false;
 
-  return base;
+  restoreTileTransform(object, nextOriginal);
+
+  state.tile = tile;
+  state.object = object;
+  state.original = nextOriginal;
+  state.base = { ...nextOriginal };
+  state.documentState = currentDocumentState;
+
+  return true;
 }
 
 function buildAppliedOffset(state, now) {
   /**
    * Large comment:
-   * Compute the current oscillation offset for the FX clone.
+   * Compute the current oscillation offset for the visible tile object.
    */
   const t = (now - state.startedAt) / 1000;
 
@@ -762,34 +378,81 @@ function buildAppliedOffset(state, now) {
   };
 }
 
-function applyCloneTransform(state, applied) {
+function applyTileTransform(state, applied) {
   /**
    * Large comment:
-   * Apply visual-only oscillation to the FX clone.
+   * Apply visual-only oscillation directly to the local visible tile object.
    *
-   * This function never mutates Foundry's managed tile mesh.
+   * This does not mutate the TileDocument. It only changes the current client's
+   * render object until Stop/Reset restores the snapshot.
    */
-  const clone = state?.clone;
+  const obj = state?.object;
   const base = state?.base;
 
-  if (!clone || !base) return;
+  if (!isLiveDisplayObject(obj) || !base) return false;
 
-  clone.x = base.x + applied.x;
-  clone.y = base.y + applied.y;
-  clone.rotation = base.rotation + applied.rotation;
+  try {
+    obj.x = base.x + applied.x;
+    obj.y = base.y + applied.y;
+    obj.rotation = base.rotation + applied.rotation;
 
-  clone.scale.set(
-    base.scaleX * applied.scaleMul,
-    base.scaleY * applied.scaleMul
-  );
+    if (obj.scale) {
+      obj.scale.set(
+        base.scaleX * applied.scaleMul,
+        base.scaleY * applied.scaleMul
+      );
+    }
 
-  if (clone.pivot) {
-    clone.pivot.set(base.pivotX, base.pivotY);
+    if (obj.pivot) {
+      obj.pivot.set(base.pivotX, base.pivotY);
+    }
+
+    if (obj.skew) {
+      obj.skew.set(base.skewX ?? 0, base.skewY ?? 0);
+    }
+
+    return true;
+  } catch (err) {
+    console.warn("[FX Bus] Tile Osc: failed to apply transform to display object.", err);
+    return false;
+  }
+}
+
+function ensureStateStillValid(runtime, tileId, state) {
+  /**
+   * Large comment:
+   * Confirm the stored visible render object still matches the current tile and
+   * rebase when the TileDocument position, size, rotation, or visible owner changes.
+   */
+  const tile = getTileById(tileId);
+  const currentObject = getVisibleTileObject(runtime, tileId, tile);
+
+  if (!tile || !currentObject) return false;
+
+  const currentDocumentState = snapshotTileDocumentState(tile);
+  if (!currentDocumentState) return false;
+
+  const objectChanged = state.object !== currentObject || !isLiveDisplayObject(state.object);
+  const documentChanged = !sameTileDocumentState(state.documentState, currentDocumentState);
+
+  if (!objectChanged && !documentChanged) return true;
+
+  return rebaseTileOscillationState(runtime, state);
+}
+
+function removeState(runtime, tileId, state, restore = true) {
+  /**
+   * Large comment:
+   * Remove one oscillation state safely.
+   *
+   * restore=true is used for ordinary stop/reset. Restore is skipped automatically
+   * if the target display object has already been destroyed by another effect.
+   */
+  if (restore) {
+    restoreTileTransform(state?.object, state?.original);
   }
 
-  if (clone.skew) {
-    clone.skew.set(base.skewX ?? 0, base.skewY ?? 0);
-  }
+  getTileMap(runtime).delete(tileId);
 }
 
 function ensureTileTicker(runtime) {
@@ -803,24 +466,20 @@ function ensureTileTicker(runtime) {
   ensureTicker(runtime, EFFECT_NAME, (_deltaMS) => {
     const now = performance.now();
 
-    for (const [tileId, state] of map.entries()) {
-      if (!ensureCloneStillValid(tileId, state)) {
-        destroyTileFxClone(state);
-        map.delete(tileId);
+    for (const [tileId, state] of Array.from(map.entries())) {
+      if (!ensureStateStillValid(runtime, tileId, state)) {
+        removeState(runtime, tileId, state, true);
         continue;
       }
-
-      const base = syncCloneBaseFromMesh(state);
-      if (!base) {
-        destroyTileFxClone(state);
-        map.delete(tileId);
-        continue;
-      }
-
-      state.base = base;
 
       const applied = buildAppliedOffset(state, now);
-      applyCloneTransform(state, applied);
+      const appliedOk = applyTileTransform(state, applied);
+
+      if (!appliedOk) {
+        removeState(runtime, tileId, state, true);
+        continue;
+      }
+
       state.applied = applied;
     }
 
@@ -830,20 +489,21 @@ function ensureTileTicker(runtime) {
   });
 }
 
-function updateExistingState(state, params) {
+function updateExistingState(runtime, tileId, state, params) {
   /**
    * Large comment:
-   * Update live oscillation parameters without recreating the clone.
+   * Update live oscillation parameters.
    *
-   * Existing phase and start time are preserved unless randomPhase is explicitly
-   * disabled.
+   * If the visible target has changed since the previous tick, rebase before
+   * accepting the update so new parameters apply to the current visual object.
    */
+  ensureStateStillValid(runtime, tileId, state);
+
   state.rotationRad = params.rotationRad;
   state.swayPx = params.swayPx;
   state.bobPx = params.bobPx;
   state.scaleAmp = params.scaleAmp;
   state.freqHz = params.freqHz;
-  state.foregroundFadeAlpha = params.foregroundFadeAlpha;
 
   if (!params.randomPhase) {
     state.phase = 0;
@@ -857,43 +517,54 @@ function startOrUpdate(runtime, payload) {
 
   for (const tileId of tileIds) {
     const tile = getTileById(tileId);
-    const mesh = getTileMesh(tile);
+    const object = getVisibleTileObject(runtime, tileId, tile);
 
-    if (!tile || !mesh) {
-      console.warn("[FX Bus] Tile Osc: tile not found or has no mesh.", { tileId });
+    if (!tile || !object) {
+      console.warn("[FX Bus] Tile Osc: tile not found or has no visible render object.", { tileId });
       continue;
     }
 
     const existing = map.get(tileId);
 
     if (existing) {
-      updateExistingState(existing, params);
-
-      const base = syncCloneBaseFromMesh(existing);
-      if (base) existing.base = base;
-
+      updateExistingState(runtime, tileId, existing, params);
       continue;
     }
 
-    const cloneState = createTileFxClone(tile);
-    if (!cloneState) continue;
+    const snapshot = snapshotTileTransform(object);
+
+    if (!snapshot) {
+      console.warn("[FX Bus] Tile Osc: could not snapshot tile transform.", { tileId });
+      continue;
+    }
+
+    const documentState = snapshotTileDocumentState(tile);
+
+    if (!documentState) {
+      console.warn("[FX Bus] Tile Osc: could not snapshot tile document state.", { tileId });
+      continue;
+    }
 
     map.set(tileId, {
       tileId,
-      mesh: cloneState.mesh,
-      clone: cloneState.clone,
-      parent: cloneState.parent,
-      original: cloneState.original,
-      base: cloneState.base,
-      applied: cloneState.applied,
+      tile,
+      object,
+      original: snapshot,
+      base: { ...snapshot },
+      documentState,
+      applied: {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scaleMul: 1
+      },
       startedAt: performance.now(),
       phase: params.randomPhase ? phaseFromId(tileId) : 0,
       rotationRad: params.rotationRad,
       swayPx: params.swayPx,
       bobPx: params.bobPx,
       scaleAmp: params.scaleAmp,
-      freqHz: params.freqHz,
-      foregroundFadeAlpha: params.foregroundFadeAlpha
+      freqHz: params.freqHz
     });
   }
 
@@ -912,8 +583,7 @@ function stop(runtime, payload) {
     const state = map.get(tileId);
     if (!state) continue;
 
-    destroyTileFxClone(state);
-    map.delete(tileId);
+    removeState(runtime, tileId, state, true);
   }
 
   if (map.size === 0) {

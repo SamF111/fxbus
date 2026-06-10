@@ -9,7 +9,7 @@
  * - Token-specific tabs call selectedTokenIds().
  * - Tile-specific tabs call selectedTileIds().
  * - Generic callers can use selectedPlaceableIdsForFxBusTab().
- * - Generic selection defaults to tokens unless the remembered active tab is tileOsc.
+ * - Generic selection defaults to tokens unless the remembered active tab is a tile FX tab.
  *
  * Tile targeting:
  * - FX Bus can keep its own private tile selection in globalThis.fxbus.ui.selectedTileIds.
@@ -25,7 +25,8 @@ const SELECTION_KIND_TOKEN = "token";
 const SELECTION_KIND_TILE = "tile";
 
 const TILE_TAB_IDS = new Set([
-  "tileOsc"
+  "tileOsc",
+  "tileFlicker"
 ]);
 
 export function normaliseHex(value, fallback) {
@@ -63,7 +64,7 @@ function getFxBusPrivateTileIds() {
    *
    * This is separate from Foundry's native canvas.tiles.controlled selection
    * because the native tile selection is tied to the Tiles layer and toolbar.
-   * FX Bus deliberately avoids switching to that toolbar for tile oscillation.
+   * FX Bus deliberately avoids switching to that toolbar for tile effects.
    */
   const ids = globalThis.fxbus?.ui?.selectedTileIds;
 
@@ -96,8 +97,8 @@ export function selectedTileIds() {
    * 1. FX Bus private tile selection from globalThis.fxbus.ui.selectedTileIds.
    * 2. Native Foundry controlled tiles from canvas.tiles.controlled.
    *
-   * This lets the Tile Osc tab target tiles without forcing the left toolbar
-   * into Foundry's native tile creation/editing tools.
+   * This lets Tile FX tabs target tiles without forcing the left toolbar into
+   * Foundry's native tile creation/editing tools.
    */
   const privateIds = getFxBusPrivateTileIds();
   if (privateIds.length > 0) return privateIds;
@@ -149,7 +150,7 @@ export function selectedPlaceableIdsForFxBusTab(tabId = getRememberedFxBusTabId(
    * Large comment:
    * Return selected placeable ids based on an FX Bus tab id.
    *
-   * - tileOsc -> selected tile ids
+   * - tileOsc / tileFlicker -> selected tile ids
    * - everything else -> selected token ids
    *
    * The returned payloadKey lets generic callers construct socket payloads

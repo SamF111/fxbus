@@ -1,242 +1,186 @@
 <form class="fxbus-panel" data-fxbus-root="1">
-  <style>
-    .fxbus-panel { color: var(--color-text-primary, inherit); }
+  <div class="fxbus-panel-layout">
+    <nav class="fxbus-category-rail" aria-label="FX Bus categories">
+      {{#each groups}}
+        <a
+          class="fxbus-category-tab {{#if this.active}}active{{/if}}"
+          data-category="{{this.id}}"
+          aria-selected="{{#if this.active}}true{{else}}false{{/if}}"
+        >
+          {{this.label}}
+        </a>
+      {{/each}}
+    </nav>
 
-    .fxbus-tabs {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      align-items: center;
-      padding-bottom: 8px;
-      margin-bottom: 12px;
-      border-bottom: 1px solid var(--color-border-light-primary, rgba(128,128,128,0.35));
-    }
+    <div class="fxbus-main">
+      <nav class="tabs fxbus-subtabs" data-group="fxbus" aria-label="FX Bus effects">
+        {{#each activeTabs}}
+          <a
+            class="item fxbus-subtab {{#if this.active}}active{{/if}}"
+            data-group="fxbus"
+            data-category="{{../activeCategory}}"
+            data-tab="{{this.id}}"
+            aria-selected="{{#if this.active}}true{{else}}false{{/if}}"
+          >
+            {{this.label}}
+          </a>
+        {{/each}}
+      </nav>
 
-    .fxbus-tabs .item {
-      position: relative;
-      appearance: none;
-      border: 1px solid var(--color-border-light-primary, rgba(128,128,128,0.35));
-      border-radius: 10px;
-      padding: 6px 12px;
-      cursor: pointer;
-      background: var(--color-bg-option, rgba(128,128,128,0.12));
-      user-select: none;
-      font-weight: 600;
-      line-height: 1;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      color: var(--color-text-primary, inherit);
-      text-decoration: none;
-      transition:
-        background 120ms ease,
-        box-shadow 120ms ease,
-        transform 120ms ease,
-        border-color 120ms ease;
-    }
+      <div class="fxbus-effect-body">
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'osc'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="osc"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenOscTab.hbs"}}
+        </section>
 
-    .fxbus-tabs .item:hover:not(.active) { background: var(--color-bg-hover, rgba(128,128,128,0.18)); }
-    .fxbus-tabs .item:focus { outline: 2px solid var(--color-border-highlight, rgba(255,255,255,0.35)); outline-offset: 1px; }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'laser'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="laser"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenLaserTab.hbs"}}
+        </section>
 
-    .fxbus-tabs .item.active {
-      background: var(--color-bg-button, rgba(128,128,128,0.22));
-      border-color: var(--color-border-highlight, rgba(255,255,255,0.45));
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-      transform: translateY(-1px);
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'recoil'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="recoil"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenRecoilTab.hbs"}}
+        </section>
 
-    .fxbus-tabs .item.active::after {
-      content: "";
-      position: absolute;
-      left: 10%;
-      right: 10%;
-      bottom: -9px;
-      height: 3px;
-      border-radius: 3px;
-      background: var(--color-border-highlight, rgba(255,255,255,0.45));
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileOsc'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileOsc"
+        >
+          {{> "modules/fxbus/templates/tabs/tileOscTab.hbs"}}
+        </section>
 
-    .fxbus-tab-separator {
-      user-select: none;
-      padding: 0 6px;
-      opacity: 0.65;
-      color: var(--color-text-secondary, var(--color-text-primary, inherit));
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileFlicker'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileFlicker"
+        >
+          {{> "modules/fxbus/templates/tabs/tileFlickerTab.hbs"}}
+        </section>
 
-    .fxbus-tabs .item.fxbus-tab-reset {
-      border-color: var(--color-border-danger, rgba(255, 80, 80, 0.65));
-      color: var(--color-text-danger, var(--color-text-primary, inherit));
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileFlow'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileFlow"
+        >
+          {{> "modules/fxbus/templates/tabs/tileFlowTab.hbs"}}
+        </section>
 
-    .fxbus-tabs .item.fxbus-tab-reset.active {
-      background: var(--color-bg-danger, rgba(255, 80, 80, 0.18));
-      border-color: var(--color-border-danger, rgba(255, 80, 80, 0.75));
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'shake'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="shake"
+        >
+          {{> "modules/fxbus/templates/tabs/screenShakeTab.hbs"}}
+        </section>
 
-    .fxbus-panel-section { padding-top: 6px; }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'pulse'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="pulse"
+        >
+          {{> "modules/fxbus/templates/tabs/screenPulseTab.hbs"}}
+        </section>
 
-    .fxbus-muted {
-      opacity: 0.85;
-      font-size: 12px;
-      line-height: 1.2;
-      color: var(--color-text-secondary, var(--color-text-primary, inherit));
-    }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'vignette'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="vignette"
+        >
+          {{> "modules/fxbus/templates/tabs/screenVignetteTab.hbs"}}
+        </section>
 
-    .fxbus-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .fxbus-inline { display: flex; gap: 8px; align-items: center; }
-    .fxbus-divider { margin: 10px 0; }
-    .fxbus-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    .fxbus-row button { min-width: 120px; }
-    .fxbus-smallbtn { min-width: 90px !important; }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'chromab'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="chromab"
+        >
+          {{> "modules/fxbus/templates/tabs/screenChromAbTab.hbs"}}
+        </section>
 
-    .fxbus-panel .form-group { margin: 6px 0; }
-    .fxbus-panel label { font-weight: 600; }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'noise'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="noise"
+        >
+          {{> "modules/fxbus/templates/tabs/screenNoiseTab.hbs"}}
+        </section>
 
-    .fxbus-panel input[type="number"],
-    .fxbus-panel input[type="text"],
-    .fxbus-panel input[type="color"],
-    .fxbus-panel select { width: 100%; }
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'blur'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="blur"
+        >
+          {{> "modules/fxbus/templates/tabs/screenBlurTab.hbs"}}
+        </section>
 
-    /* Deterministic visibility: only the active tab body displays */
-    .fxbus-panel-section.tab { display: none; }
-    .fxbus-panel-section.tab.active { display: block; }
-  </style>
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'smear'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="smear"
+        >
+          {{> "modules/fxbus/templates/tabs/screenSmearTab.hbs"}}
+        </section>
 
-  <nav class="tabs fxbus-tabs" data-group="fxbus" aria-label="FX Bus tabs">
-    {{#each tabs}}
-      <a
-        class="item {{#if (eq this.id ../activeTab)}}active{{/if}}"
-        data-group="fxbus"
-        data-tab="{{this.id}}"
-      >{{this.label}}</a>
-    {{/each}}
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'streak'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="streak"
+        >
+          {{> "modules/fxbus/templates/tabs/screenStreakTab.hbs"}}
+        </section>
 
-    <span class="fxbus-tab-separator" aria-hidden="true">|</span>
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'screen') (eq activeTab 'monochrome'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="screen"
+          data-tab="monochrome"
+        >
+          {{> "modules/fxbus/templates/tabs/screenMonochromeTab.hbs"}}
+        </section>
 
-    <a
-      class="item fxbus-tab-reset {{#if (eq activeTab 'reset')}}active{{/if}}"
-      data-group="fxbus"
-      data-tab="reset"
-    >Reset</a>
-  </nav>
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'canvas') (eq activeTab 'rotate'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="canvas"
+          data-tab="rotate"
+        >
+          {{> "modules/fxbus/templates/tabs/screenRotateTab.hbs"}}
+        </section>
 
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'osc')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="osc"
-  >
-    {{> "modules/fxbus/templates/tabs/tokenOscTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'laser')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="laser"
-  >
-    {{> "modules/fxbus/templates/tabs/tokenLaserTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'recoil')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="recoil"
-  >
-    {{> "modules/fxbus/templates/tabs/tokenRecoilTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'tileOsc')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="tileOsc"
-  >
-    {{> "modules/fxbus/templates/tabs/tileOscTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'shake')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="shake"
-  >
-    {{> "modules/fxbus/templates/tabs/screenShakeTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'rotate')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="rotate"
-  >
-    {{> "modules/fxbus/templates/tabs/screenRotateTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'pulse')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="pulse"
-  >
-    {{> "modules/fxbus/templates/tabs/screenPulseTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'vignette')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="vignette"
-  >
-    {{> "modules/fxbus/templates/tabs/screenVignetteTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'chromab')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="chromab"
-  >
-    {{> "modules/fxbus/templates/tabs/screenChromAbTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'noise')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="noise"
-  >
-    {{> "modules/fxbus/templates/tabs/screenNoiseTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'blur')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="blur"
-  >
-    {{> "modules/fxbus/templates/tabs/screenBlurTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'smear')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="smear"
-  >
-    {{> "modules/fxbus/templates/tabs/screenSmearTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'streak')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="streak"
-  >
-    {{> "modules/fxbus/templates/tabs/screenStreakTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'monochrome')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="monochrome"
-  >
-    {{> "modules/fxbus/templates/tabs/screenMonochromeTab.hbs"}}
-  </section>
-
-  <section
-    class="tab fxbus-panel-section {{#if (eq activeTab 'reset')}}active{{/if}}"
-    data-group="fxbus"
-    data-tab="reset"
-  >
-    {{> "modules/fxbus/templates/tabs/resetTab.hbs"}}
-  </section>
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'reset') (eq activeTab 'reset'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="reset"
+          data-tab="reset"
+        >
+          {{> "modules/fxbus/templates/tabs/resetTab.hbs"}}
+        </section>
+      </div>
+    </div>
+  </div>
 </form>

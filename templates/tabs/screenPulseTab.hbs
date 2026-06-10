@@ -1,3 +1,11 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenPulseTab.hbs --}}
+
+<p class="fxbus-muted">
+  Broadcasts a visual-only coloured screen pulse to all clients. Useful for alarms, impacts, damage flashes, warnings, and environmental surges.
+</p>
+
+<hr class="fxbus-divider"/>
+
 <div class="fxbus-grid-2">
   <div class="form-group">
     <label>Colour</label>
@@ -123,11 +131,7 @@
 <hr class="fxbus-divider"/>
 
 <div class="fxbus-row">
-  <button type="button" data-action="pulseStart">Start</button>
-  <button type="button" data-action="pulseStop" class="fxbus-smallbtn">Stop</button>
-  <button type="button" data-action="fxbusCopyToMacro" class="fxbus-smallbtn">Copy to Macro</button>
+  <button type="button" class="fxbus-do" data-action="pulseStart">Start</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="pulseStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>
-
-<p class="fxbus-muted">
-  Start broadcasts to all clients. Stop ends the effect on all clients.
-</p>

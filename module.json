@@ -1,16 +1,17 @@
 {
   "id": "fxbus",
   "title": "FX Bus",
-  "description": "GM-broadcast, client-side visual effects framework. Provides a single socket-based FX listener that renders deterministic, visual-only effects locally on each client using PIXI and canvas.app.ticker. No document mutation. Explicit start/stop semantics with global reset.",
-  "version": "0.6.2",
+  "description": "<p><strong>FX Bus</strong> adds GM-controlled cinematic visual effects to Foundry VTT.</p><p>Trigger screen shakes, pulses, blur, noise, tile motion, token motion, tethers, recoil, and other live visual effects from a dedicated control panel or reusable macros.</p><p>All effects are visual-only and reversible. FX Bus does not change your scenes, tokens, walls, actors, items, or world data.</p>",
+  "version": "0.7.0",
   "authors": [
     {
-      "name": "mintchoc"
+      "name": "mintchoc",
+      "url": "https://github.com/SamF111"
     }
   ],
   "compatibility": {
-    "minimum": "13",
-    "verified": "14"
+    "minimum": 13,
+    "verified": 14
   },
   "esmodules": [
     "scripts/fxbus.js"
@@ -19,11 +20,18 @@
     "styles/fxbus.css"
   ],
   "socket": true,
+  "media": [
+    {
+      "type": "setup",
+      "url": "modules/fxbus/assets/icons/fxbus.webp",
+      "thumbnail": "modules/fxbus/assets/icons/fxbus.webp"
+    }
+  ],
   "url": "https://github.com/SamF111/fxbus",
   "readme": "https://raw.githubusercontent.com/SamF111/fxbus/main/README.md",
   "bugs": "https://github.com/SamF111/fxbus/issues",
   "changelog": "https://github.com/SamF111/fxbus/releases",
   "license": "LICENSE",
   "manifest": "https://github.com/SamF111/fxbus/releases/latest/download/module.json",
-  "download": "https://github.com/SamF111/fxbus/releases/download/v0.6.2/fxbus.zip"
+  "download": "https://github.com/SamF111/fxbus/releases/download/v0.7.0/fxbus.zip"
 }

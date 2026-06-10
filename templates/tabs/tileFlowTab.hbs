@@ -1,0 +1,155 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tileFlowTab.hbs --}}
+
+<p class="fxbus-muted">
+  Requires selected tiles. Scrolls the visible tile texture without changing the Tile document.
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Direction Angle (deg)</label>
+    <input
+      type="number"
+      name="tileFlowAngleDeg"
+      value="0"
+      step="1"
+      min="-360"
+      max="360"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Speed (px/s)</label>
+    <input
+      type="number"
+      name="tileFlowStartSpeedPxPerSec"
+      value="160"
+      step="10"
+      min="-2000"
+      max="2000"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Repeat Scale</label>
+    <input
+      type="number"
+      name="tileFlowRepeatScale"
+      value="1"
+      step="0.05"
+      min="0.05"
+      max="20"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Overlay Alpha</label>
+    <input
+      type="number"
+      name="tileFlowOverlayAlpha"
+      value="1"
+      step="0.05"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Acceleration Mode</label>
+    <select name="tileFlowAccelerationMode">
+      <option value="none" selected>None</option>
+      <option value="linear">Linear</option>
+      <option value="easeInOut">Ease In/Out</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Acceleration (px/s²)</label>
+    <input
+      type="number"
+      name="tileFlowAccelerationPxPerSec2"
+      value="0"
+      step="10"
+      min="-4000"
+      max="4000"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Acceleration Duration (ms)</label>
+    <input
+      type="number"
+      name="tileFlowAccelerationDurationMs"
+      value="2000"
+      step="100"
+      min="0"
+      max="60000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Effect Duration (ms)</label>
+    <input
+      type="number"
+      name="tileFlowDurationMs"
+      value="0"
+      step="100"
+      min="0"
+      max="600000"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Completion</label>
+    <select name="tileFlowCompletionMode">
+      <option value="retain" selected>Retain final phase</option>
+      <option value="reset">Reset when finished</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Stop Mode</label>
+    <select name="tileFlowStopMode">
+      <option value="reset" selected>Reset</option>
+      <option value="retain">Retain final phase</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Blend Mode</label>
+    <select name="tileFlowBlendMode">
+      <option value="NORMAL" selected>Normal</option>
+      <option value="ADD">Add</option>
+      <option value="SCREEN">Screen</option>
+      <option value="MULTIPLY">Multiply</option>
+      <option value="OVERLAY">Overlay</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="tileFlowRandomPhase"/>
+      Random phase per tile
+    </label>
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-action="tileFlowApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="tileFlowStopSelected">Stop Selected</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="tileFlowStopAll">Stop All</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
+</div>

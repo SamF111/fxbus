@@ -6,15 +6,16 @@
  * Responsibilities:
  * - Build a standalone Foundry macro script that replays an FX Bus "Apply" by emitting a payload via the FX Bus runtime.
  * - Copy macro source text to clipboard with robust fallbacks.
- * - Optional helper to create/update a Macro document (not required for clipboard workflow).
+ * - Optional helper to create/update a Macro document.
  *
  * Design constraints:
  * - Macro script must be self-contained and not depend on the GM panel UI.
  * - Macro script must not mutate documents; it should only emit FX messages.
+ * - Generated macros should be player-runnable when Macro permissions allow it.
  * - Clipboard operations must be initiated by a user gesture; this module only provides primitives.
  *
  * Compatibility:
- * - Foundry VTT v12+ (tested patterns); intended for v13+.
+ * - Foundry VTT v12+ patterns; intended for v13+.
  */
 
 const MODULE_ID = "fxbus";
@@ -26,7 +27,6 @@ function safeStr(value, fallback = "") {
 }
 
 function jsStringLiteral(value) {
-  // Safe for embedding in a JS template literal.
   return String(value ?? "")
     .replace(/\\/g, "\\\\")
     .replace(/`/g, "\\`")
@@ -55,7 +55,9 @@ function buildHeaderCommentLines({
     " *",
     " * Behaviour:",
     " * - Visual-only. Does not update Documents.",
-    " * - Runs on every connected client that has FX Bus active.",
+    " * - Runs through the local FX Bus runtime.",
+    " * - Broadcast policy is handled by FX Bus, not by this macro wrapper.",
+    " * - No GM check is applied here; Foundry macro permissions decide who may run it.",
     " */"
   ].filter(Boolean);
 
@@ -66,26 +68,23 @@ function buildHeaderCommentLines({
  * Build the source code for a Foundry script macro that emits an FX Bus payload.
  *
  * Important:
- * - FX Bus in your architecture is runtime-driven (`globalThis.fxbus.emit`) not socket-driven.
- * - Emitting directly to `game.socket.emit("module.fxbus", payload)` will do nothing unless you also
- *   register a raw socket listener. Therefore, the generated macro calls the runtime.
+ * - FX Bus is runtime-driven through globalThis.fxbus.emit.
+ * - Generated macros are intentionally not wrapped in an IIFE.
+ * - Generated macros intentionally do not include a GM guard.
+ * - Macro ownership/permissions decide who can run the macro.
+ * - FX Bus runtime/socket handling decides what happens with the visual payload.
  *
- * Player-runnable:
- * - Default is player-runnable (no GM guard).
- * - Set requireGM=true only when you explicitly want to restrict the macro to GMs.
- *
- * Metadata:
- * - The generated macro header can include generation metadata (date/user/module version).
- * - Provide these via options.meta to avoid relying on the GM panel at build time.
+ * Compatibility:
+ * - socketNamespace and forceSocket are retained for compatibility with older
+ *   call sites, but runtime emission remains the recommended path.
  *
  * @param {string} macroName - Human-friendly macro name for header comments.
  * @param {object} payload - Payload to emit via the FX Bus runtime.
  * @param {object} options
- * @param {string} [options.socketNamespace] - Kept for compatibility; not used unless forceSocket=true.
- * @param {boolean} [options.requireGM] - If true, macro returns immediately for non-GM users.
- * @param {boolean} [options.forceSocket] - If true, emit to socket directly instead of runtime (not recommended).
+ * @param {string} [options.socketNamespace] - Used only when forceSocket=true.
+ * @param {boolean} [options.forceSocket] - If true, emit to socket directly instead of runtime.
  * @param {object} [options.meta]
- * @param {string} [options.meta.generatedAt] - ISO string timestamp (recommended).
+ * @param {string} [options.meta.generatedAt] - ISO string timestamp.
  * @param {string} [options.meta.generatedBy] - User name.
  * @param {string} [options.meta.fxbusVersion] - Module version string.
  * @returns {string} JavaScript macro source.
@@ -95,7 +94,6 @@ export function fxbusBuildMacroSource(
   payload,
   {
     socketNamespace = DEFAULT_SOCKET_NAMESPACE,
-    requireGM = false,
     forceSocket = false,
     meta = {}
   } = {}
@@ -108,16 +106,18 @@ export function fxbusBuildMacroSource(
 
   const payloadJson = JSON.stringify(payload, null, 2);
 
-  const emitLine = forceSocket
-    ? `game.socket.emit(${JSON.stringify(String(socketNamespace))}, payload);`
-    : `globalThis.fxbus?.emit?.(payload);`;
-
   const runtimeGuard = forceSocket
     ? ""
-    : `  if (!globalThis.fxbus?.emit) {
-    ui.notifications?.error?.("FX Bus runtime not available.");
-    return;
-  }`;
+    : `if (!globalThis.fxbus?.emit) {
+  ui.notifications?.error?.("FX Bus runtime not available.");
+  throw new Error("FX Bus runtime not available.");
+}
+
+`;
+
+  const emitLine = forceSocket
+    ? `game.socket.emit(${JSON.stringify(String(socketNamespace))}, payload);`
+    : "globalThis.fxbus.emit(payload);";
 
   const header = buildHeaderCommentLines({
     macroName: safeName,
@@ -129,22 +129,19 @@ export function fxbusBuildMacroSource(
 
   return `${header}
 
-(() => {
-  ${requireGM ? "if (!game.user.isGM) return;" : ""}
-${runtimeGuard}
-  const payload = ${payloadJson};
-  ${emitLine}
-})();`;
+${runtimeGuard}const payload = ${payloadJson};
+
+${emitLine}`;
 }
 
 /**
  * Copy text to the system clipboard.
  *
  * Primary:
- * - navigator.clipboard.writeText (requires secure context + user gesture)
+ * - navigator.clipboard.writeText, where available.
  *
  * Fallback:
- * - document.execCommand("copy") using a temporary textarea
+ * - document.execCommand("copy") using a temporary textarea.
  *
  * @param {string} text
  * @returns {Promise<void>}
@@ -185,8 +182,9 @@ export async function fxbusCopyTextToClipboard(text) {
  * Optional: Create or update a Foundry Macro document containing the given command.
  *
  * Notes:
- * - Not required if your workflow is clipboard-only.
- * - If you use this, you may also want to auto-place it on the hotbar.
+ * - This helper is not required if the workflow is clipboard-only.
+ * - By default, created macros are global macros.
+ * - Macro execution is still controlled by Foundry macro permissions.
  *
  * @param {string} macroName
  * @param {string} macroSource
