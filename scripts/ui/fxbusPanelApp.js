@@ -34,8 +34,10 @@
  *
  * DOM lifecycle:
  * - Foundry destroys the panel DOM on close.
- * - Tab handlers are rebound on every render.
- * - AbortController prevents stacked navigation listeners across re-renders.
+ * - V13/V14 detached windows and PopOut-style DOM movement can cause re-renders.
+ * - Every render owns one AbortController.
+ * - Old render listeners are aborted before new listeners are attached.
+ * - Every panel-level listener and every tab listener must use the current signal.
  */
 
 import { tokenOscTabDef } from "./tabs/tokenOscTab.js";
@@ -92,6 +94,19 @@ let TEMPLATES_PRELOADED = false;
 function templatePathToPartialName(path) {
   const file = String(path).split("/").pop() ?? "";
   return file.replace(/\.hbs$/i, "");
+}
+
+function cssEscapeForRoot(root, value) {
+  /**
+   * Large comment:
+   * Escape a form-field name for use in querySelector.
+   *
+   * Detached windows have their own document/window. Prefer the CSS object from
+   * the root's owning window, then fall back to the main window CSS object.
+   */
+  const css = root?.ownerDocument?.defaultView?.CSS ?? globalThis.CSS;
+  if (css && typeof css.escape === "function") return css.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
 }
 
 function errorMessageForNotification(err, fallback) {
@@ -295,7 +310,8 @@ function applyStateToForm(root, state) {
   for (const [name, value] of Object.entries(state ?? {})) {
     if (String(name).startsWith("__")) continue;
 
-    const el = root.querySelector(`[name="${CSS.escape(name)}"]`);
+    const escapedName = cssEscapeForRoot(root, name);
+    const el = root.querySelector(`[name="${escapedName}"]`);
     if (!el) continue;
 
     if (el.type === "checkbox") {
@@ -344,16 +360,26 @@ function captureStateFromForm(root) {
   return state;
 }
 
-function wireStatePersistence(root) {
+function wireStatePersistence(root, signal) {
   /**
    * Large comment:
    * Debounce form-state writes so sliders, typing, and number edits do not spam
-   * game.settings. This listener is attached to the current rendered form only.
+   * game.settings.
+   *
+   * The listeners belong to the current render and are disposed by the render's
+   * AbortController. Pending debounced writes are also cancelled when the render
+   * is aborted.
    */
   let timer = null;
 
+  const clearTimer = () => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+  };
+
   const scheduleSave = () => {
-    if (timer) clearTimeout(timer);
+    clearTimer();
 
     timer = setTimeout(() => {
       writeState(captureStateFromForm(root));
@@ -361,8 +387,10 @@ function wireStatePersistence(root) {
     }, 150);
   };
 
-  root.addEventListener("input", scheduleSave, true);
-  root.addEventListener("change", scheduleSave, true);
+  root.addEventListener("input", scheduleSave, { capture: true, signal });
+  root.addEventListener("change", scheduleSave, { capture: true, signal });
+
+  signal?.addEventListener?.("abort", clearTimer, { once: true });
 }
 
 function getGroupById(groups, categoryId) {
@@ -566,17 +594,21 @@ function renderSubTabs(root, app) {
    *
    * The tab content sections are static in fxbus-panel.hbs; only the visible
    * sub-tab navigation needs to change when a category is clicked.
+   *
+   * Detached windows have their own document, so elements are created from the
+   * root's owning document instead of the global document.
    */
   const nav = root.querySelector(".tabs[data-group='fxbus'].fxbus-subtabs");
   if (!nav) return;
 
+  const doc = root.ownerDocument ?? document;
   const group = getGroupById(app._groups, app._activeCategory);
   const tabs = group?.tabs ?? [];
 
   nav.innerHTML = "";
 
   for (const tab of tabs) {
-    const a = document.createElement("a");
+    const a = doc.createElement("a");
     a.className = "item fxbus-subtab";
     a.dataset.group = "fxbus";
     a.dataset.category = app._activeCategory;
@@ -1142,11 +1174,29 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const root = this.element?.querySelector?.("form.fxbus-panel");
     if (!root) return;
 
+    /**
+     * Large comment:
+     * Dispose every listener owned by the previous render before attaching any
+     * new listener for this render.
+     *
+     * This prevents duplicate Apply/Stop handlers after Foundry re-renders the
+     * ApplicationV2 panel, V14 moves it into a detached window, or PopOut-style
+     * modules move the live DOM to a second browser document.
+     */
+    try {
+      this._tabAbort?.abort?.();
+    } catch {
+      // ignore
+    }
+
+    this._tabAbort = new AbortController();
+    const signal = this._tabAbort.signal;
+
     applyStateToForm(root, this._state);
 
     for (const t of this._tabs) {
       try {
-        t.wire(root, runtime);
+        t.wire(root, runtime, signal);
       } catch (err) {
         console.error("[FX Bus] tab wire failed", {
           tab: t?.id,
@@ -1161,7 +1211,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    wireStatePersistence(root);
+    wireStatePersistence(root, signal);
     renderSubTabs(root, this);
     setActivePanelState(root, this._activeCategory, this._activeTab);
 
@@ -1184,15 +1234,8 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
 
-    try {
-      this._tabAbort?.abort?.();
-    } catch {
-      // ignore
-    }
-
-    this._tabAbort = new AbortController();
-    wireCategoryClicks(this, root, this._tabAbort.signal);
-    wireSubTabClicks(this, root, this._tabAbort.signal);
+    wireCategoryClicks(this, root, signal);
+    wireSubTabClicks(this, root, signal);
   }
 
   async _onClose(_options) {

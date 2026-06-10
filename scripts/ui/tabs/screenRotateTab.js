@@ -18,6 +18,10 @@
  * - ease: smooth additive rotation.
  * - spin: stronger smooth additive rotation.
  * - snap: immediate additive rotation.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num } from "./shared/panelUtils.js";
@@ -110,14 +114,14 @@ export function screenRotateTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = getPanel(root);
       if (!panel) return;
 
       const modeSelect = panel.querySelector('select[name="rotateMode"]');
       const returnCheckbox = panel.querySelector('input[name="rotateReturnWhenFinished"]');
 
-      function syncReturnCheckbox() {
+      const syncReturnCheckbox = () => {
         /**
          * Large comment:
          * Wobble Hold must land at the new angle. Disable the return checkbox in
@@ -134,37 +138,49 @@ export function screenRotateTabDef() {
         if (forcedHold) {
           returnCheckbox.checked = false;
         }
-      }
+      };
 
-      function start() {
+      const start = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
-      function stop() {
+      const stop = () => {
         runtime.emit({
           action: "fx.screenRotate.stop"
         });
-      }
+      };
 
-      modeSelect?.addEventListener("change", () => {
-        syncReturnCheckbox();
-      });
+      modeSelect?.addEventListener(
+        "change",
+        () => {
+          syncReturnCheckbox();
+        },
+        { signal }
+      );
 
       syncReturnCheckbox();
 
       panel
         .querySelector('button[type="button"][data-action="rotateStart"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          start.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            start();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="rotateStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
     }
   };
 }

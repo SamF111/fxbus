@@ -10,6 +10,10 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, setDisabled } from "./shared/panelUtils.js";
@@ -46,7 +50,7 @@ export function screenShakeTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
@@ -57,31 +61,39 @@ export function screenShakeTabDef() {
 
       if (until && dur) {
         const sync = () => setDisabled(dur, Boolean(until.checked));
-        until.addEventListener("change", sync);
+        until.addEventListener("change", sync, { signal });
         sync();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.screenShake.stop" });
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="shakeStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="shakeApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

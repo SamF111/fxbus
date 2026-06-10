@@ -32,6 +32,10 @@
  *
  * Copy-to-macro support:
  * - buildApplyPayload(root, runtime) returns the same payload used by Apply.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, selectedTileIds } from "./shared/panelUtils.js";
@@ -249,13 +253,13 @@ export function tileOscTabDef() {
       return buildPayload(root, runtime);
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      function stop() {
+      const stop = () => {
         /**
          * Large comment:
          * Stop selected tiles if any are currently selected.
@@ -283,9 +287,9 @@ export function tileOscTabDef() {
         }
 
         releaseNativeSelectedTiles();
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         try {
           const payload = buildPayload(root, runtime);
 
@@ -300,21 +304,29 @@ export function tileOscTabDef() {
           ui.notifications.warn("Select one or more tiles for Tile Oscillation.");
           console.warn("[FX Bus] Tile Osc apply failed", err);
         }
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="tileOscStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="tileOscApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

@@ -15,43 +15,74 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply (start/update).
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 const TAB_ID = "streak";
 const RAMP_MS_MAX = 1000;
 
+function cssEscapeForScope(scope, value) {
+  /**
+   * Large comment:
+   * Escape a form-field name for querySelector.
+   *
+   * Detached windows have their own document/window. Prefer CSS.escape from the
+   * scope's owning window, then fall back to the main window CSS object.
+   */
+  const css = scope?.ownerDocument?.defaultView?.CSS ?? globalThis.CSS;
+  if (css && typeof css.escape === "function") return css.escape(String(value));
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
 function getElByNames(scope, names) {
   for (const name of names) {
-    const el = scope.querySelector(`[name="${CSS.escape(name)}"]`);
+    const escapedName = cssEscapeForScope(scope, name);
+    const el = scope.querySelector(`[name="${escapedName}"]`);
     if (el) return el;
   }
+
   return null;
 }
 
 function num(scope, names, fallback) {
   const el = getElByNames(scope, Array.isArray(names) ? names : [names]);
   const v = Number(el?.value);
+
   return Number.isFinite(v) ? v : fallback;
 }
 
 function bool(scope, names, fallback = false) {
   const el = getElByNames(scope, Array.isArray(names) ? names : [names]);
+
   return el ? Boolean(el.checked) : fallback;
 }
 
 function str(scope, names, fallback) {
   const el = getElByNames(scope, Array.isArray(names) ? names : [names]);
   const v = el?.value;
+
   return typeof v === "string" && v.length ? v : fallback;
 }
 
 function clamp(n, lo, hi) {
-  n = Number(n);
-  if (!Number.isFinite(n)) return lo;
-  return Math.max(lo, Math.min(hi, n));
+  const value = Number(n);
+
+  if (!Number.isFinite(value)) return lo;
+
+  return Math.max(lo, Math.min(hi, value));
 }
 
-function buildApplyPayload(panel) {
+function getPanel(root) {
+  return (
+    root.querySelector('.tab[data-group="fxbus"][data-tab="streak"]') ??
+    root.querySelector('[data-fxbus-tab="streak"]')
+  );
+}
+
+function buildStreakApplyPayload(panel) {
   const RUN_NAMES = [
     "streak_runUntilStopped",
     "runUntilStopped",
@@ -60,7 +91,12 @@ function buildApplyPayload(panel) {
     "streak_indefinite"
   ];
 
-  const DURATION_NAMES = ["streak_durationMs", "durationMs", "streak_duration", "duration"];
+  const DURATION_NAMES = [
+    "streak_durationMs",
+    "durationMs",
+    "streak_duration",
+    "duration"
+  ];
 
   const RAMP_NAMES = [
     "streak_rampMs",
@@ -71,9 +107,7 @@ function buildApplyPayload(panel) {
   ];
 
   const runUntilStopped = bool(panel, RUN_NAMES, false);
-
   const durationMs = runUntilStopped ? 0 : num(panel, DURATION_NAMES, 600);
-
   const rampMs = clamp(num(panel, RAMP_NAMES, 250), 0, RAMP_MS_MAX);
 
   return {
@@ -91,22 +125,10 @@ function buildApplyPayload(panel) {
   };
 }
 
-function wireTab(root, runtime) {
+function wireTab(root, runtime, signal) {
   if (!root || !runtime?.emit) return;
 
-  // Kill any previous listeners for this tab on re-render.
-  try {
-    root.__fxbusStreakAbort?.abort?.();
-  } catch {
-    // ignore
-  }
-  const ac = new AbortController();
-  root.__fxbusStreakAbort = ac;
-
-  const panel =
-    root.querySelector('.tab[data-group="fxbus"][data-tab="streak"]') ??
-    root.querySelector('[data-fxbus-tab="streak"]');
-
+  const panel = getPanel(root);
   if (!panel) return;
 
   const applyBtn =
@@ -119,7 +141,7 @@ function wireTab(root, runtime) {
     panel.querySelector('[data-action="stop"]') ??
     panel.querySelector('[data-action="streakStop"]');
 
-  // Name fallbacks (handles template drift).
+  // Name fallbacks handle template drift.
   const RUN_NAMES = [
     "streak_runUntilStopped",
     "runUntilStopped",
@@ -128,9 +150,14 @@ function wireTab(root, runtime) {
     "streak_indefinite"
   ];
 
-  const DURATION_NAMES = ["streak_durationMs", "durationMs", "streak_duration", "duration"];
+  const DURATION_NAMES = [
+    "streak_durationMs",
+    "durationMs",
+    "streak_duration",
+    "duration"
+  ];
 
-  function applyRunToggleUi() {
+  const applyRunToggleUi = () => {
     const runEl = getElByNames(panel, RUN_NAMES);
     const durEl = getElByNames(panel, DURATION_NAMES);
     if (!durEl) return;
@@ -143,45 +170,45 @@ function wireTab(root, runtime) {
 
     const fg = durEl.closest?.(".form-group");
     if (fg) fg.classList.toggle("disabled", run);
-  }
+  };
 
-  // React to checkbox toggles (and also update once immediately).
+  // React to checkbox toggles and update once immediately.
   for (const name of RUN_NAMES) {
-    const el = panel.querySelector(`[name="${CSS.escape(name)}"]`);
+    const escapedName = cssEscapeForScope(panel, name);
+    const el = panel.querySelector(`[name="${escapedName}"]`);
     if (!el) continue;
 
     el.addEventListener(
       "change",
-      () => applyRunToggleUi(),
-      { signal: ac.signal, capture: true }
+      () => {
+        applyRunToggleUi();
+      },
+      { capture: true, signal }
     );
   }
+
   applyRunToggleUi();
 
-  if (applyBtn) {
-    applyBtn.addEventListener(
-      "click",
-      (event) => {
-        event.preventDefault();
+  applyBtn?.addEventListener(
+    "click",
+    (event) => {
+      event.preventDefault();
 
-        const payload = buildApplyPayload(panel);
-        console.debug("[FX Bus] screenStreak.start payload", payload);
-        runtime.emit(payload);
-      },
-      { signal: ac.signal }
-    );
-  }
+      const payload = buildStreakApplyPayload(panel);
+      console.debug("[FX Bus] screenStreak.start payload", payload);
+      runtime.emit(payload);
+    },
+    { signal }
+  );
 
-  if (stopBtn) {
-    stopBtn.addEventListener(
-      "click",
-      (event) => {
-        event.preventDefault();
-        runtime.emit({ action: "fx.screenStreak.stop" });
-      },
-      { signal: ac.signal }
-    );
-  }
+  stopBtn?.addEventListener(
+    "click",
+    (event) => {
+      event.preventDefault();
+      runtime.emit({ action: "fx.screenStreak.stop" });
+    },
+    { signal }
+  );
 }
 
 export function screenStreakTabDef() {
@@ -197,15 +224,14 @@ export function screenStreakTabDef() {
      * @returns {object}
      */
     buildApplyPayload(root, _runtime) {
-      const panel =
-        root.querySelector('.tab[data-group="fxbus"][data-tab="streak"]') ??
-        root.querySelector('[data-fxbus-tab="streak"]');
-
+      const panel = getPanel(root);
       if (!panel) throw new Error("ScreenStreak: panel not found");
 
-      return buildApplyPayload(panel);
+      return buildStreakApplyPayload(panel);
     },
 
-    wire: (root, runtime) => wireTab(root, runtime)
+    wire(root, runtime, signal) {
+      wireTab(root, runtime, signal);
+    }
   };
 }

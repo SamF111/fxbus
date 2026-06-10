@@ -30,6 +30,10 @@
  * - Provides buildMacroSource(root, runtime, options) for an authoritative toggle macro.
  * - The custom macro checks GM-local state and emits explicit start or stop.
  * - This avoids late-joining clients interpreting raw toggle in the opposite state.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import {
@@ -283,13 +287,9 @@ function wireSelectionSummary(panel) {
    * No live token reads.
    */
   updateSelectedTokenSummary(panel);
-
-  panel.__fxbusLaserCleanup = () => {
-    // no hooks to remove
-  };
 }
 
-function syncDurationControls(panel) {
+function syncDurationControls(panel, signal) {
   const until = panel.querySelector('input[name="laserUntilStopped"]');
   const duration = panel.querySelector('input[name="laserDurationMs"]');
 
@@ -297,11 +297,11 @@ function syncDurationControls(panel) {
 
   const sync = () => setDisabled(duration, Boolean(until.checked));
 
-  until.addEventListener("change", sync);
+  until.addEventListener("change", sync, { signal });
   sync();
 }
 
-function syncFlowControls(panel) {
+function syncFlowControls(panel, signal) {
   const direction = panel.querySelector('select[name="laserFlowDirection"]');
   const speed = panel.querySelector('input[name="laserFlowSpeed"]');
   const count = panel.querySelector('input[name="laserFlowCount"]');
@@ -320,11 +320,11 @@ function syncFlowControls(panel) {
     setDisabled(colourText, disabled);
   };
 
-  direction.addEventListener("change", sync);
+  direction.addEventListener("change", sync, { signal });
   sync();
 }
 
-function syncProceduralControls(panel) {
+function syncProceduralControls(panel, signal) {
   /**
    * Large comment:
    * Disable irrelevant advanced procedural controls based on the selected style.
@@ -366,7 +366,7 @@ function syncProceduralControls(panel) {
     setDisabled(chainWidth, !isChain);
   };
 
-  style.addEventListener("change", sync);
+  style.addEventListener("change", sync, { signal });
   sync();
 }
 
@@ -399,71 +399,69 @@ export function tokenLaserTabDef() {
       }
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      try {
-        panel.__fxbusLaserCleanup?.();
-      } catch {
-        // ignore
-      }
+      syncColourPair(panel, "laserColourPicker", "laserColour", "#ff2222", signal);
+      syncColourPair(panel, "laserSecondaryColourPicker", "laserSecondaryColour", "#ffffff", signal);
+      syncColourPair(panel, "laserOutlineColourPicker", "laserOutlineColour", "#000000", signal);
+      syncColourPair(panel, "laserFlowColourPicker", "laserFlowColour", "#ffffff", signal);
 
-      syncColourPair(panel, "laserColourPicker", "laserColour", "#ff2222");
-      syncColourPair(panel, "laserSecondaryColourPicker", "laserSecondaryColour", "#ffffff");
-      syncColourPair(panel, "laserOutlineColourPicker", "laserOutlineColour", "#000000");
-      syncColourPair(panel, "laserFlowColourPicker", "laserFlowColour", "#ffffff");
-
-      syncDurationControls(panel);
-      syncFlowControls(panel);
-      syncProceduralControls(panel);
+      syncDurationControls(panel, signal);
+      syncFlowControls(panel, signal);
+      syncProceduralControls(panel, signal);
       wireSelectionSummary(panel);
 
-      function apply() {
+      const apply = () => {
         try {
           runtime.emit(buildPayload(root, "fx.tokenLaser.update"));
         } catch (err) {
           ui.notifications.warn("Select at least two tokens for Token Tether.");
           console.warn("[FX Bus] Token Tether apply failed", err);
         }
-      }
+      };
 
-      function toggle() {
+      const toggle = () => {
         try {
           runtime.emit(buildAuthoritativeTogglePayload(root, runtime));
         } catch (err) {
           ui.notifications.warn("Select at least two tokens for Token Tether.");
           console.warn("[FX Bus] Token Tether toggle failed", err);
         }
-      }
+      };
 
-      function stop() {
+      const stop = () => {
         try {
           runtime.emit(buildStopPayload(root));
         } catch (err) {
           ui.notifications.warn("Token Tether stop failed.");
           console.warn("[FX Bus] Token Tether stop failed", err);
         }
-      }
+      };
 
-      function stopAll() {
+      const stopAll = () => {
         runtime.emit({ action: "fx.tokenLaser.stopAll" });
-      }
+      };
 
       for (const button of Array.from(panel.querySelectorAll(".fxbus-do[data-do]"))) {
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
+        button.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            event.stopPropagation();
 
-          const action = button.dataset.do;
+            const action = button.dataset.do;
 
-          if (action === "laserApply") apply();
-          if (action === "laserToggle") toggle();
-          if (action === "laserStop") stop();
-          if (action === "laserStopAll") stopAll();
-        });
+            if (action === "laserApply") apply();
+            if (action === "laserToggle") toggle();
+            if (action === "laserStop") stop();
+            if (action === "laserStopAll") stopAll();
+          },
+          { signal }
+        );
       }
     }
   };

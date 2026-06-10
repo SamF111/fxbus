@@ -10,6 +10,10 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) so the panel-level Copy to Macro action can work.
  * - Payload is identical to Apply.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, normaliseHex, setDisabled, syncColourPair } from "./shared/panelUtils.js";
@@ -58,44 +62,52 @@ export function screenVignetteTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
 
-      syncColourPair(panel, "vigColourPicker", "vigColour", "#000000");
+      syncColourPair(panel, "vigColourPicker", "vigColour", "#000000", signal);
 
       const until = panel.querySelector('input[name="vigUntilStopped"]');
       const dur = panel.querySelector('input[name="vigDurationMs"]');
 
       if (until && dur) {
         const sync = () => setDisabled(dur, Boolean(until.checked));
-        until.addEventListener("change", sync);
+        until.addEventListener("change", sync, { signal });
         sync();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.screenVignette.stop" });
-      }
+      };
 
-      function apply() {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-do="vigStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-do="vigApply"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          apply.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            apply();
+          },
+          { signal }
+        );
     }
   };
 }

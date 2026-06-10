@@ -16,6 +16,10 @@
  * - This avoids activating the native Foundry Tiles toolbar just to target tile FX.
  * - selectedTileIds() reads the private FX Bus tile selection first, then falls back
  *   to native canvas.tiles.controlled.
+ *
+ * DOM lifecycle:
+ * - Helpers that bind listeners accept an optional AbortSignal.
+ * - Panel/tab render code owns the signal and aborts old listeners before rewiring.
  */
 
 const MODULE_ID = "fxbus";
@@ -26,7 +30,8 @@ const SELECTION_KIND_TILE = "tile";
 
 const TILE_TAB_IDS = new Set([
   "tileOsc",
-  "tileFlicker"
+  "tileFlicker",
+  "tileFlow"
 ]);
 
 export function normaliseHex(value, fallback) {
@@ -150,7 +155,7 @@ export function selectedPlaceableIdsForFxBusTab(tabId = getRememberedFxBusTabId(
    * Large comment:
    * Return selected placeable ids based on an FX Bus tab id.
    *
-   * - tileOsc / tileFlicker -> selected tile ids
+   * - tileOsc / tileFlicker / tileFlow -> selected tile ids
    * - everything else -> selected token ids
    *
    * The returned payloadKey lets generic callers construct socket payloads
@@ -173,7 +178,15 @@ export function selectedPlaceableIdsForFxBusTab(tabId = getRememberedFxBusTabId(
   };
 }
 
-export function syncColourPair(root, pickerName, textName, fallback) {
+export function syncColourPair(root, pickerName, textName, fallback, signal) {
+  /**
+   * Large comment:
+   * Keep a colour input and text input synchronised.
+   *
+   * The listeners belong to the current panel render. When a signal is supplied,
+   * re-rendering, detaching, closing, or PopOut-style DOM movement can dispose
+   * old listeners cleanly before the tab is wired again.
+   */
   const picker = root.querySelector(`input[name="${pickerName}"]`);
   const text = root.querySelector(`input[name="${textName}"]`);
 
@@ -184,11 +197,19 @@ export function syncColourPair(root, pickerName, textName, fallback) {
   text.value = initial;
   picker.value = initial;
 
-  picker.addEventListener("input", () => {
-    text.value = picker.value;
-  });
+  picker.addEventListener(
+    "input",
+    () => {
+      text.value = picker.value;
+    },
+    { signal }
+  );
 
-  text.addEventListener("input", () => {
-    picker.value = normaliseHex(text.value, fallback);
-  });
+  text.addEventListener(
+    "input",
+    () => {
+      picker.value = normaliseHex(text.value, fallback);
+    },
+    { signal }
+  );
 }

@@ -7,6 +7,10 @@
  *
  * Copy-to-macro support:
  * - buildApplyPayload(root, runtime) returns the exact socket payload.
+ *
+ * DOM lifecycle:
+ * - wire(root, runtime, signal) binds listeners owned by the current panel render.
+ * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
 import { num, setDisabled } from "./shared/panelUtils.js";
@@ -40,7 +44,7 @@ export function screenMonochromeTabDef() {
       };
     },
 
-    wire(root, runtime) {
+    wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
@@ -54,44 +58,56 @@ export function screenMonochromeTabDef() {
       };
 
       if (until && dur) {
-        until.addEventListener("change", syncDuration);
+        until.addEventListener("change", syncDuration, { signal });
         syncDuration();
       }
 
-      function stop() {
+      const stop = () => {
         runtime.emit({ action: "fx.screenMonochrome.stop" });
-      }
+      };
 
-      function start() {
+      const start = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
-      }
+      };
 
-      function update() {
+      const update = () => {
         const payload = this.buildApplyPayload(root, runtime);
         payload.action = "fx.screenMonochrome.update";
         runtime.emit(payload);
-      }
+      };
 
       panel
         .querySelector('button[type="button"][data-action="monoStart"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          start.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            start();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="monoUpdate"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          update.call(this);
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            update();
+          },
+          { signal }
+        );
 
       panel
         .querySelector('button[type="button"][data-action="monoStop"]')
-        ?.addEventListener("click", (event) => {
-          event.preventDefault();
-          stop();
-        });
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stop();
+          },
+          { signal }
+        );
     }
   };
 }
