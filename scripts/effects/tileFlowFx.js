@@ -34,12 +34,24 @@
  * - Does not update Tile documents.
  * - Does not mutate tile texture offsets in document data.
  * - Does not call tile.control(), tile.release(), or inspect tile.controlled.
- * - Does not hide, replace, or shader-modify the Foundry-managed tile mesh.
+ * - Does not shader-modify the Foundry-managed tile mesh.
  * - Creates a passive PIXI.TilingSprite overlay beside the real tile render object.
- * - The overlay follows the tile's actual render parent, transform, visibility,
- *   opacity, blend mode, zIndex, rotation, and document dimensions.
- * - The overlay is clipped to the tile rectangle.
+ * - Temporarily hides the original tile render object by alpha while the overlay is active.
+ * - Restores the original tile render object alpha on stop/reset.
+ * - The overlay follows the tile render object's parent, position, rotation, pivot, skew,
+ *   visibility, renderability, blend mode, zIndex, and document dimensions.
+ * - The overlay deliberately does not inherit object.scale, because Foundry tile meshes may
+ *   already bake document sizing into their geometry.
+ * - The overlay is clipped to the TileDocument rectangle.
  * - Stop/reset destroys only the overlay, mask, and any FX-owned temporary texture.
+ *
+ * Foundry v13/v14 compatibility:
+ * - The overlay is inserted into the tile render object's actual parent.
+ * - Therefore its position/rotation must come from the render object, not from
+ *   TileDocument scene coordinates.
+ * - The sprite/mask dimensions still come from TileDocument width/height.
+ * - Do not use object.getLocalBounds(); in Foundry v14 it can expose texture/internal
+ *   bounds and make the whole tile image repeat as miniature copies.
  *
  * Long-running stability:
  * - Accumulated tile flow phase is wrapped to a large safe pixel range.
@@ -107,7 +119,7 @@ function getTileRenderObject(tile) {
    * Large comment:
    * Resolve the Foundry-managed tile render object.
    *
-   * Tile Flow does not replace this object. It only uses the object as the
+   * Tile Flow does not replace this object. It uses the object as the
    * authoritative render-context source for the passive overlay.
    */
   if (!tile) return null;
@@ -278,10 +290,13 @@ function buildParams(payload) {
 function snapshotTileDocumentState(tile) {
   /**
    * Large comment:
-   * Snapshot the TileDocument placement fields used to size and position the
-   * overlay.
+   * Snapshot the TileDocument placement fields used to size the overlay.
    *
    * This is read-only. It does not mutate the document.
+   *
+   * Do not use x/y from this snapshot to position the overlay after it has been
+   * inserted into the tile render object's parent. Use the render object's
+   * local position instead.
    */
   const doc = tile?.document;
   if (!doc) return null;
@@ -340,6 +355,164 @@ function drawMask(mask, width, height) {
     height
   );
   mask.endFill();
+}
+
+function resetOverlayGeometryToDocumentShape(state) {
+  /**
+   * Large comment:
+   * Keep the overlay sprite and mask sized to the TileDocument rectangle.
+   *
+   * The container follows the Foundry tile render object's position/rotation.
+   * The overlay's own drawable area remains the document tile rectangle.
+   *
+   * Do not use object.getLocalBounds() here. In Foundry v14 this can report
+   * texture/internal bounds, which makes the overlay repeat the whole tile image
+   * many times inside itself.
+   */
+  if (!state?.sprite || !state?.mask || !state?.documentState) return;
+
+  const width = Math.max(1, Number(state.documentState.width ?? 1));
+  const height = Math.max(1, Number(state.documentState.height ?? 1));
+
+  state.sprite.x = -width / 2;
+  state.sprite.y = -height / 2;
+  state.sprite.width = width;
+  state.sprite.height = height;
+
+  state.mask.x = 0;
+  state.mask.y = 0;
+
+  drawMask(state.mask, width, height);
+}
+
+function copyPointLike(target, source, fallbackX = 0, fallbackY = 0) {
+  /**
+   * Large comment:
+   * Copy PIXI point-like values without assuming copyFrom exists.
+   */
+  if (!target) return;
+
+  if (source && typeof target.copyFrom === "function") {
+    try {
+      target.copyFrom(source);
+      return;
+    } catch {
+      // Fall through to direct assignment.
+    }
+  }
+
+  target.x = Number.isFinite(Number(source?.x)) ? Number(source.x) : fallbackX;
+  target.y = Number.isFinite(Number(source?.y)) ? Number(source.y) : fallbackY;
+}
+
+function restoreOriginalTileObject(state) {
+  /**
+   * Large comment:
+   * Restore the Foundry-managed tile render object's alpha after Tile Flow ends
+   * or when Foundry replaces the render object.
+   */
+  if (!state?.object || !state.originalObjectAlphaCaptured) return;
+
+  try {
+    state.object.alpha = Number.isFinite(Number(state.originalObjectAlpha))
+      ? Number(state.originalObjectAlpha)
+      : 1;
+  } catch {
+    // ignore
+  }
+
+  state.originalObjectAlphaCaptured = false;
+}
+
+function captureOriginalTileObjectAlpha(state, object) {
+  /**
+   * Large comment:
+   * Capture the original alpha exactly once per render object.
+   */
+  if (!state || !object || state.originalObjectAlphaCaptured) return;
+
+  state.originalObjectAlpha = Number.isFinite(Number(object.alpha))
+    ? Number(object.alpha)
+    : 1;
+  state.originalObjectAlphaCaptured = true;
+}
+
+function hideOriginalTileObject(state, object) {
+  /**
+   * Large comment:
+   * Hide the Foundry-managed tile render object while Tile Flow owns the visible
+   * animated replacement.
+   *
+   * This remains visual-only. It does not mutate TileDocument data.
+   */
+  if (!state || !object) return;
+
+  captureOriginalTileObjectAlpha(state, object);
+
+  try {
+    object.alpha = 0;
+  } catch {
+    // ignore
+  }
+}
+
+function getOriginalTileObjectAlpha(state, object) {
+  /**
+   * Large comment:
+   * Return the tile render object's effective pre-FX alpha.
+   *
+   * Once the original object is hidden, object.alpha is zero. The overlay must
+   * still use the captured pre-FX alpha as its visibility basis.
+   */
+  if (state?.originalObjectAlphaCaptured) {
+    const captured = Number(state.originalObjectAlpha);
+    return Number.isFinite(captured) ? captured : 1;
+  }
+
+  const live = Number(object?.alpha);
+  return Number.isFinite(live) ? live : 1;
+}
+
+function syncOverlayTransformToTileObject(state, object) {
+  /**
+   * Large comment:
+   * Sync the overlay container to the Foundry tile render object's local
+   * placement while keeping overlay geometry document-sized.
+   *
+   * Critical rule:
+   * - The overlay is inserted into object.parent, so position/rotation/pivot/skew
+   *   come from the render object.
+   * - The overlay sprite and mask are sized from TileDocument.
+   * - Do not copy object.scale. Foundry's tile render object may already bake
+   *   document dimensions into its mesh/texture mapping. Copying object.scale
+   *   causes the v14 small-overlay failure.
+   */
+  if (!state?.container || !object) return;
+
+  copyPointLike(
+    state.container.position,
+    object.position,
+    Number(object.x ?? 0),
+    Number(object.y ?? 0)
+  );
+
+  state.container.rotation = Number.isFinite(Number(object.rotation))
+    ? Number(object.rotation)
+    : degToRad(Number(state.documentState?.rotation ?? 0));
+
+  if (state.container.scale) {
+    state.container.scale.set(1, 1);
+  }
+
+  if (state.container.pivot) {
+    copyPointLike(state.container.pivot, object.pivot, 0, 0);
+  }
+
+  if (state.container.skew && object.skew) {
+    copyPointLike(state.container.skew, object.skew, 0, 0);
+  }
+
+  resetOverlayGeometryToDocumentShape(state);
 }
 
 function createSubTexture(sourceTexture, x, y, width, height) {
@@ -834,6 +1007,7 @@ function syncOverlayToTile(state) {
   if (!tile || !object || !sourceTexture || !documentState) return false;
 
   if (state.object !== object || object.destroyed) {
+    restoreOriginalTileObject(state);
     state.tile = tile;
     state.object = object;
   }
@@ -843,28 +1017,23 @@ function syncOverlayToTile(state) {
   const shapeChanged = !sameDocumentShape(state.documentState, documentState);
   state.documentState = documentState;
 
-  if (shapeChanged) {
-    state.sprite.width = documentState.width;
-    state.sprite.height = documentState.height;
-    state.sprite.x = -documentState.width / 2;
-    state.sprite.y = -documentState.height / 2;
-
-    drawMask(state.mask, documentState.width, documentState.height);
-  }
-
   applyTileScaleToSprite(state);
 
   if (!insertOverlayBesideTileObject(state)) return false;
 
-  state.container.x = Math.round(documentState.x + (documentState.width / 2));
-  state.container.y = Math.round(documentState.y + (documentState.height / 2));
-  state.container.rotation = degToRad(documentState.rotation);
+  syncOverlayTransformToTileObject(state, object);
+
+  if (shapeChanged) {
+    setSpriteTilePosition(state);
+  }
+
+  const originalAlpha = getOriginalTileObjectAlpha(state, object);
 
   state.container.visible = object.visible !== false;
   state.container.renderable = object.renderable !== false;
+  state.container.alpha = clamp(originalAlpha * state.overlayAlpha, 0, 1);
 
-  const objectAlpha = Number.isFinite(object.alpha) ? object.alpha : 1;
-  state.container.alpha = clamp(objectAlpha * state.overlayAlpha, 0, 1);
+  hideOriginalTileObject(state, object);
 
   if (object.blendMode !== undefined && state.useTileBlendMode) {
     state.container.blendMode = object.blendMode;
@@ -887,6 +1056,8 @@ function syncOverlayToTile(state) {
 
 function destroyOverlay(state) {
   if (!state) return;
+
+  restoreOriginalTileObject(state);
 
   try {
     if (state.container?.parent) {
@@ -1281,6 +1452,9 @@ function startOrUpdate(runtime, payload) {
       repeatScale: params.repeatScale,
       blendMode: params.blendMode,
       useTileBlendMode: params.blendMode === normaliseBlendMode("NORMAL"),
+
+      originalObjectAlpha: 1,
+      originalObjectAlphaCaptured: false,
 
       status: STATUS_RUNNING
     };
