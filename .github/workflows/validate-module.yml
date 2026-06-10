@@ -1,0 +1,289 @@
+name: Validate Module
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate FX Bus module files
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Show tool versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          python3 --version
+          jq --version
+          zip --version | head -n 2
+
+      - name: Validate module.json syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq . module.json > /dev/null
+
+      - name: Validate required module.json fields
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_fields=(
+            ".id"
+            ".title"
+            ".description"
+            ".version"
+            ".authors"
+            ".compatibility.minimum"
+            ".compatibility.verified"
+            ".esmodules"
+            ".styles"
+            ".socket"
+            ".manifest"
+            ".download"
+          )
+
+          for field in "${required_fields[@]}"; do
+            value="$(jq -r "$field // empty" module.json)"
+            if [ -z "$value" ] || [ "$value" = "null" ]; then
+              echo "::error::module.json is missing required field: $field"
+              exit 1
+            fi
+          done
+
+      - name: Validate module id and release download filename
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          module_id="$(jq -r '.id' module.json)"
+          version="$(jq -r '.version' module.json)"
+          manifest="$(jq -r '.manifest' module.json)"
+          download="$(jq -r '.download' module.json)"
+
+          if [ "$module_id" != "fxbus" ]; then
+            echo "::error::module.json id must be fxbus, got: $module_id"
+            exit 1
+          fi
+
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::module.json version must look like 0.7.0, got: $version"
+            exit 1
+          fi
+
+          if [[ "$manifest" != "https://github.com/SamF111/fxbus/releases/latest/download/module.json" ]]; then
+            echo "::error::Unexpected manifest URL: $manifest"
+            exit 1
+          fi
+
+          expected_download="https://github.com/SamF111/fxbus/releases/download/v${version}/fxbus.zip"
+
+          if [ "$download" != "$expected_download" ]; then
+            echo "::error::download URL must be: $expected_download"
+            echo "::error::got: $download"
+            exit 1
+          fi
+
+      - name: Validate manifest file references
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          jq -r '.esmodules[]' module.json | while read -r file; do
+            if [ ! -f "$file" ]; then
+              echo "::error::module.json references missing esmodule: $file"
+              exit 1
+            fi
+          done
+
+          jq -r '.styles[]' module.json | while read -r file; do
+            if [ ! -f "$file" ]; then
+              echo "::error::module.json references missing stylesheet: $file"
+              exit 1
+            fi
+          done
+
+          if [ ! -f "README.md" ]; then
+            echo "::error::README.md missing"
+            exit 1
+          fi
+
+          if [ ! -f "LICENSE" ]; then
+            echo "::error::LICENSE missing"
+            exit 1
+          fi
+
+      - name: JavaScript syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t js_files < <(find scripts -type f -name "*.js" | sort)
+
+          if [ "${#js_files[@]}" -eq 0 ]; then
+            echo "::error::No JavaScript files found under scripts/"
+            exit 1
+          fi
+
+          for file in "${js_files[@]}"; do
+            echo "Checking JS syntax: $file"
+            node --check "$file"
+          done
+
+      - name: Validate local JavaScript imports exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(".").resolve()
+          scripts = root / "scripts"
+
+          import_pattern = re.compile(
+              r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
+          )
+
+          ok = True
+
+          for path in sorted(scripts.rglob("*.js")):
+              text = path.read_text(encoding="utf-8")
+
+              for match in import_pattern.finditer(text):
+                  specifier = match.group(1)
+
+                  if not specifier.startswith("."):
+                      continue
+
+                  target = (path.parent / specifier).resolve()
+
+                  candidates = [
+                      target,
+                      target.with_suffix(".js") if target.suffix == "" else target,
+                      target / "index.js",
+                  ]
+
+                  if not any(candidate.exists() for candidate in candidates):
+                      rel_path = path.relative_to(root)
+                      print(f"::error file={rel_path}::Missing local import target: {specifier}")
+                      ok = False
+
+          if not ok:
+              sys.exit(1)
+          PY
+
+      - name: Validate Handlebars templates
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t hbs_files < <(find templates -type f -name "*.hbs" | sort)
+
+          if [ "${#hbs_files[@]}" -eq 0 ]; then
+            echo "::error::No Handlebars templates found under templates/"
+            exit 1
+          fi
+
+          for file in "${hbs_files[@]}"; do
+            echo "Checking template: $file"
+
+            if [ ! -s "$file" ]; then
+              echo "::error file=$file::Template is empty"
+              exit 1
+            fi
+          done
+
+      - name: Validate template partial references exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          root = pathlib.Path(".").resolve()
+          templates = root / "templates"
+
+          partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
+
+          ok = True
+
+          for path in sorted(templates.rglob("*.hbs")):
+              text = path.read_text(encoding="utf-8")
+
+              for match in partial_pattern.finditer(text):
+                  partial = match.group(1)
+
+                  if partial.startswith("modules/fxbus/"):
+                      target = root / partial.removeprefix("modules/fxbus/")
+                  else:
+                      target = path.parent / partial
+
+                  if not target.exists():
+                      rel_path = path.relative_to(root)
+                      print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
+                      ok = False
+
+          if not ok:
+              sys.exit(1)
+          PY
+
+      - name: Validate expected folders exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_dirs=(
+            "assets"
+            "scripts"
+            "styles"
+            "templates"
+          )
+
+          for dir in "${expected_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::Expected folder missing: $dir"
+              exit 1
+            fi
+          done
+
+      - name: Build validation zip
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f fxbus.zip
+
+          zip -r fxbus.zip \
+            module.json \
+            README.md \
+            LICENSE \
+            assets \
+            scripts \
+            styles \
+            templates \
+            -x "*.git*" \
+            -x "*.github*"
+
+          if [ ! -s fxbus.zip ]; then
+            echo "::error::fxbus.zip was not created"
+            exit 1
+          fi
+
+          unzip -l fxbus.zip
