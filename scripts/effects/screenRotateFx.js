@@ -18,7 +18,9 @@
  *
  * Additive behaviour:
  * - spin, ease, snap, and wobbleHold add to the current target angle when already active/held.
- * - Example: 45 degrees + 45 degrees becomes 90 degrees.
+ * - Internal held angles are intentionally not wrapped to -180..180.
+ * - This prevents 350 -> 370 style movements becoming 350 -> 10 full-turn mistakes.
+ * - Example: -180 degrees + -90 degrees becomes -270 degrees, not +90 degrees.
  * - wobble is intentionally not additive; it restarts as a temporary impulse.
  *
  * Actions:
@@ -239,7 +241,7 @@ function prepareStateForStart(runtime, stage, mode, requestedAngleDeg) {
    * Additive modes:
    * - preserve the original rootBase
    * - preserve current visual rotation
-   * - add the requested angle to the previous target angle
+   * - add the requested angle to the previous target angle without wrapping
    *
    * Wobble:
    * - restore any existing rotate effect first
@@ -254,7 +256,7 @@ function prepareStateForStart(runtime, stage, mode, requestedAngleDeg) {
     return {
       rootBase: snapshotStage(stage),
       startAngleDeg: 0,
-      targetAngleDeg: normaliseAngleDeg(requestedAngleDeg),
+      targetAngleDeg: num(requestedAngleDeg, 0),
       currentAngleDeg: 0,
       currentVelocityDeg: 0
     };
@@ -262,18 +264,15 @@ function prepareStateForStart(runtime, stage, mode, requestedAngleDeg) {
 
   cleanupTicker(runtime, EFFECT_NAME);
 
-  const previousTargetAngleDeg = normaliseAngleDeg(
-    num(previousState.targetAngleDeg, 0)
-  );
+  const previousTargetAngleDeg = num(previousState.targetAngleDeg, 0);
 
-  const previousCurrentAngleDeg = normaliseAngleDeg(
-    num(previousState.currentAngleDeg, previousTargetAngleDeg)
+  const previousCurrentAngleDeg = num(
+    previousState.currentAngleDeg,
+    previousTargetAngleDeg
   );
 
   const previousVelocityDeg = num(previousState.oscVelocityDeg, 0);
-  const nextTargetAngleDeg = normaliseAngleDeg(
-    previousTargetAngleDeg + requestedAngleDeg
-  );
+  const nextTargetAngleDeg = previousTargetAngleDeg + requestedAngleDeg;
 
   return {
     rootBase: previousState.rootBase,
@@ -289,8 +288,8 @@ function initialiseOscillatorState(state) {
    * Large comment:
    * Initialise the angular oscillator lazily.
    *
-   * This keeps additive re-presses smooth because they can inherit the current
-   * angle and velocity from the previous Wobble Hold run.
+   * Wobble Hold is oscillator-based, so it deliberately works in a wrapped
+   * angular space and uses shortestDeltaDeg() for target capture.
    */
   if (!Number.isFinite(state.oscAngleDeg)) {
     state.oscAngleDeg = normaliseAngleDeg(
@@ -479,7 +478,7 @@ function startScreenRotate(runtime, payload = {}) {
   state.targetAngleDeg = prepared.targetAngleDeg;
   state.currentAngleDeg = prepared.currentAngleDeg;
   state.currentVelocityDeg = prepared.currentVelocityDeg;
-  state.oscAngleDeg = prepared.currentAngleDeg;
+  state.oscAngleDeg = normaliseAngleDeg(prepared.currentAngleDeg);
   state.oscVelocityDeg = prepared.currentVelocityDeg;
   state.oscElapsedSeconds = 0;
   state.durationMs = durationMs;
@@ -518,7 +517,13 @@ function startScreenRotate(runtime, payload = {}) {
       safeDeltaMS
     );
 
-    liveState.currentAngleDeg = normaliseAngleDeg(angleDeg);
+    /*
+     * Do not normalise currentAngleDeg here.
+     *
+     * Held additive rotations must preserve unwrapped state, otherwise crossing
+     * the -180/180 or 0/360 seam turns a small left/right step into a large spin.
+     */
+    liveState.currentAngleDeg = angleDeg;
 
     setRotationAroundScreenCentre(
       liveStage,
@@ -537,8 +542,15 @@ function startScreenRotate(runtime, payload = {}) {
       return;
     }
 
-    liveState.currentAngleDeg = normaliseAngleDeg(liveState.targetAngleDeg);
-    liveState.oscAngleDeg = liveState.currentAngleDeg;
+    /*
+     * Keep the held target unwrapped.
+     *
+     * Example:
+     * - -180 + -90 must remain -270.
+     * - +180 + +90 must remain +270.
+     */
+    liveState.currentAngleDeg = liveState.targetAngleDeg;
+    liveState.oscAngleDeg = normaliseAngleDeg(liveState.currentAngleDeg);
     liveState.oscVelocityDeg = 0;
 
     setRotationAroundScreenCentre(
