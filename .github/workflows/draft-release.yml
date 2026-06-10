@@ -45,7 +45,7 @@ jobs:
 
           VERSION="${VERSION#v}"
           TAG="v${VERSION}"
-          ZIP_NAME="${MODULE_ID}-${VERSION}.zip"
+          ZIP_NAME="${MODULE_ID}.zip"
 
           if [ "$VERSION" != "$MODULE_VERSION" ]; then
             echo "::error::Requested version ${VERSION} does not match module.json version ${MODULE_VERSION}."
