@@ -20,6 +20,13 @@
  * - The standalone FX Bus toolbar icon preserves the current native Foundry
  *   control and opens the matching FX Bus panel category.
  *
+ * Trust model:
+ * - Normal players are allowed to emit packets.
+ * - Normal player packets are not applied locally.
+ * - Normal player packets are still broadcast so receivers can reject and warn.
+ * - Trusted players, Assistant users, and GMs apply locally and broadcast.
+ * - Receiver-side trust enforcement remains in socket.js.
+ *
  * Provenance:
  * - emit() enriches outgoing payloads with __fxbus sender metadata.
  * - Handlers receive the enriched payload.
@@ -50,6 +57,75 @@ function getModule() {
   return mod;
 }
 
+function getTrustedRoleValue() {
+  /**
+   * Large comment:
+   * Resolve Foundry's Trusted role value without hardcoding where possible.
+   *
+   * Foundry's usual role order is:
+   * - NONE = 0
+   * - PLAYER = 1
+   * - TRUSTED = 2
+   * - ASSISTANT = 3
+   * - GAMEMASTER = 4
+   *
+   * Trusted is the minimum role allowed to apply FX locally.
+   */
+  const trusted = globalThis.CONST?.USER_ROLES?.TRUSTED;
+  return Number.isFinite(trusted) ? trusted : 2;
+}
+
+function getCurrentUserRole() {
+  /**
+   * Large comment:
+   * Read the current Foundry user role defensively across likely data shapes.
+   * Current Foundry normally exposes game.user.role directly.
+   */
+  const role =
+    game.user?.role ??
+    game.user?.data?.role ??
+    game.user?.system?.role ??
+    null;
+
+  const n = Number(role);
+  return Number.isFinite(n) ? n : null;
+}
+
+function currentUserCanApplyFxLocally() {
+  /**
+   * Large comment:
+   * Decide whether this client should apply its own emitted FX locally.
+   *
+   * Normal players may still emit packets, but their local client must not
+   * apply the FX because receiving clients will reject the same packet.
+   */
+  if (game.user?.isGM === true) return true;
+
+  const role = getCurrentUserRole();
+  if (role === null) return false;
+
+  return role >= getTrustedRoleValue();
+}
+
+function warnSkippedLocalApply(action) {
+  /**
+   * Large comment:
+   * Warn the emitting user when their packet is broadcast but not applied
+   * locally due to role restrictions.
+   */
+  console.warn("[FX Bus] skipped local apply for untrusted emitter", {
+    action,
+    userId: game.userId,
+    userName: game.user?.name,
+    role: getCurrentUserRole(),
+    requiredMinimumRole: "Trusted"
+  });
+
+  ui.notifications?.warn?.(
+    `FX Bus sent '${action}', but did not apply it locally because your user role is not Trusted, Assistant, or GM.`
+  );
+}
+
 function buildSenderMetadata() {
   /**
    * Large comment:
@@ -62,6 +138,7 @@ function buildSenderMetadata() {
     userId: game.userId,
     userName: game.user?.name,
     isGM: game.user?.isGM === true,
+    role: getCurrentUserRole(),
     ts: Date.now()
   };
 }
@@ -89,8 +166,9 @@ function handleLocalPayload(runtime, action, enriched, t0) {
    * Large comment:
    * Apply an emitted payload locally before broadcasting it to other clients.
    *
-   * This keeps the GM/client that triggered the effect visually in sync with
-   * all socket receivers and avoids needing to wait for a loopback socket event.
+   * This is skipped for normal players because receiver-side trust policy will
+   * reject their packets. Skipping local application keeps all clients
+   * consistent.
    */
   const handler = runtime.handlers.get(action);
 
@@ -126,8 +204,8 @@ function broadcastPayload(runtime, action, enriched) {
    * Large comment:
    * Broadcast an enriched FX Bus payload to other connected clients.
    *
-   * The socket layer is intentionally thin: it receives the same enriched
-   * payload shape that was handled locally.
+   * The socket layer receives the enriched payload and applies its own
+   * receiver-side trust policy before dispatching.
    */
   try {
     game.socket.emit(runtime.socketName, enriched);
@@ -154,10 +232,13 @@ function getOrCreateRuntime() {
    * - Store per-effect local state maps.
    * - Store registered action handlers.
    * - Store active PIXI tickers.
-   * - Provide emit(), which applies locally and then broadcasts.
+   * - Provide emit(), which may apply locally and always broadcasts.
    *
-   * emit() always enriches payloads with sender metadata under __fxbus before
-   * local handling and socket broadcast.
+   * emit() always:
+   * - Validates the action.
+   * - Enriches payloads with sender metadata under __fxbus.
+   * - Applies locally only if the current user is Trusted, Assistant, or GM.
+   * - Still broadcasts normal-player packets so receivers can reject and warn.
    */
   if (globalThis[RUNTIME_KEY]) return globalThis[RUNTIME_KEY];
 
@@ -189,7 +270,13 @@ function getOrCreateRuntime() {
       };
 
       logEmit(runtime, action, enriched);
-      handleLocalPayload(runtime, action, enriched, t0);
+
+      if (currentUserCanApplyFxLocally()) {
+        handleLocalPayload(runtime, action, enriched, t0);
+      } else {
+        warnSkippedLocalApply(action);
+      }
+
       broadcastPayload(runtime, action, enriched);
     }
   };
