@@ -1,5 +1,7 @@
 name: Draft Release
 
+run-name: Draft FX Bus release ${{ inputs.version || 'from module.json' }}
+
 on:
   workflow_dispatch:
     inputs:
