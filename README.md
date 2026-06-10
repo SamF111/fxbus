@@ -294,3 +294,13 @@ If the proposal aligns with the goals of the project, I will do my best to imple
 [Feature Requests](https://github.com/SamF111/fxbus/issues/1)
 
 
+## Optional donation
+
+FX Bus is free and open source.
+
+This project does not accept donations. If you would like to make a donation instead, please consider UNITED24, Ukraine’s official fundraising platform:
+
+[Donate through UNITED24](https://u24.gov.ua/)
+
+FX Bus receives no money from this link.
+
