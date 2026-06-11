@@ -32,6 +32,8 @@ const TOKEN_RECOIL_STOP = "fx.tokenRecoil.stop";
 const TOKEN_DOLLY_ZOOM_STOP = "fx.tokenDollyZoom.stop";
 const TOKEN_LASER_STOP_ALL = "fx.tokenLaser.stopAll";
 const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
+const TOKEN_BEAM_STOP_ALL = "fx.tokenBeam.stopAll";
+const TOKEN_BEAM_HARD_RESET = "fx.tokenBeam.hardReset";
 
 // Tile stop actions
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
@@ -83,6 +85,25 @@ function safeCallHandler(runtime, action, payload) {
     fn(payload ?? { action });
   } catch (err) {
     console.error("[FX Bus] reset: handler threw", { action, err });
+  }
+}
+
+function safeCallHelper(runtime, helperName) {
+  /**
+   * Large comment:
+   * Call an optional reset helper exposed directly on the runtime.
+   *
+   * This is a defensive fallback for effects that expose an implementation-level
+   * hard reset helper in addition to their normal action handlers.
+   */
+  const fn = runtime?.[helperName];
+
+  if (typeof fn !== "function") return;
+
+  try {
+    fn();
+  } catch (err) {
+    console.error("[FX Bus] reset: helper threw", { helperName, err });
   }
 }
 
@@ -272,6 +293,47 @@ function buildForcedCanvasResetPayload(action) {
   };
 }
 
+function resetTokenLaser(runtime) {
+  /**
+   * Large comment:
+   * Reset the older Token Laser implementation.
+   *
+   * This effect is currently the token-to-token tether/link implementation. It
+   * owns persistent PIXI containers and therefore needs both a normal stop-all
+   * and a hard reset to remove orphaned graphics.
+   */
+  stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
+    action: TOKEN_LASER_STOP_ALL
+  });
+
+  stopIfPresent(runtime, TOKEN_LASER_HARD_RESET, {
+    action: TOKEN_LASER_HARD_RESET
+  });
+}
+
+function resetTokenBeam(runtime) {
+  /**
+   * Large comment:
+   * Reset the newer Token Beam implementation.
+   *
+   * Token Beam owns persistent beam graphics and follows rendered token
+   * positions. It should be stopped explicitly before the final ticker/map
+   * backstop cleanup.
+   */
+  stopIfPresent(runtime, TOKEN_BEAM_STOP_ALL, {
+    action: TOKEN_BEAM_STOP_ALL
+  });
+
+  if (hasHandler(runtime, TOKEN_BEAM_HARD_RESET)) {
+    safeCallHandler(runtime, TOKEN_BEAM_HARD_RESET, {
+      action: TOKEN_BEAM_HARD_RESET
+    });
+    return;
+  }
+
+  safeCallHelper(runtime, "__fxbusTokenBeamHardReset");
+}
+
 function onReset(runtime) {
   /**
    * Large comment:
@@ -280,12 +342,13 @@ function onReset(runtime) {
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
    * 2. Stop Token Dolly Zoom before ticker cleanup so it can restore canvas and token visual snapshots.
    * 3. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
-   * 4. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
-   * 5. Force Tile Flow to reset rather than retain final phase.
-   * 6. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
-   * 7. Stop canvas-output effects so DOM canvas transforms and event interception are removed.
-   * 8. Remove any residual tickers.
-   * 9. Clear runtime maps as a final backstop.
+   * 4. Hard-reset token beam containers to remove orphaned PIXI graphics on desynchronised clients.
+   * 5. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
+   * 6. Force Tile Flow to reset rather than retain final phase.
+   * 7. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
+   * 8. Stop canvas-output effects so DOM canvas transforms and event interception are removed.
+   * 9. Remove any residual tickers.
+   * 10. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
 
@@ -320,13 +383,8 @@ function onReset(runtime) {
     buildForcedTokenResetPayload(TOKEN_DOLLY_ZOOM_STOP)
   );
 
-  stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
-    action: TOKEN_LASER_STOP_ALL
-  });
-
-  stopIfPresent(runtime, TOKEN_LASER_HARD_RESET, {
-    action: TOKEN_LASER_HARD_RESET
-  });
+  resetTokenLaser(runtime);
+  resetTokenBeam(runtime);
 
   const tileIds = collectIdsFromNestedFxMap(runtime.tileFx);
 

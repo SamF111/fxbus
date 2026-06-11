@@ -16,6 +16,7 @@
 
 import { registerTokenOscillationFx } from "./tokenOscillationFx.js";
 import { registerTokenLaserFx } from "./tokenLaserFx.js";
+import { registerTokenBeamFx } from "./tokenBeamFx.js";
 import { registerTokenRecoilFx } from "./tokenRecoilFx.js";
 import { registerTokenDollyZoomFx } from "./tokenDollyZoomFx.js";
 
@@ -47,9 +48,15 @@ export function registerBuiltInEffects(runtime) {
    *
    * These are token-related visual effects intended to be part of the normal
    * FX Bus runtime.
+   *
+   * Naming note:
+   * - Token Laser is the older token-to-token tether/link implementation.
+   * - Token Beam is the new single-origin power beam implementation, exposed in
+   *   the UI as a true token laser.
    */
   registerTokenOscillationFx(runtime);
   registerTokenLaserFx(runtime);
+  registerTokenBeamFx(runtime);
   registerTokenRecoilFx(runtime);
   registerTokenDollyZoomFx(runtime);
 

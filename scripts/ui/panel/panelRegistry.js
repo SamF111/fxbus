@@ -8,6 +8,10 @@
  * - Build grouped category/tab metadata for the panel.
  * - Provide tab and category lookup helpers.
  * - Keep effect imports and template-partial paths out of the ApplicationV2 app.
+ *
+ * Developer note:
+ * - New GM panel tabs are registered here.
+ * - Add the tab import, template path, and category entry in buildGroups().
  */
 
 import {
@@ -16,6 +20,7 @@ import {
 
 import { tokenOscTabDef } from "../tabs/tokenOscTab.js";
 import { tokenLaserTabDef } from "../tabs/tokenLaserTab.js";
+import { tokenBeamTabDef } from "../tabs/tokenBeamTab.js";
 import { tokenRecoilTabDef } from "../tabs/tokenRecoilTab.js";
 import { tokenDollyZoomTabDef } from "../tabs/tokenDollyZoomTab.js";
 
@@ -41,6 +46,7 @@ import { resetTabDef } from "../tabs/resetTab.js";
 export const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenOscTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenLaserTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tokenBeamTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenDollyZoomTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
@@ -91,6 +97,7 @@ export function buildGroups() {
    */
   const tokenOsc = tokenOscTabDef();
   const tokenLaser = tokenLaserTabDef();
+  const tokenBeam = tokenBeamTabDef();
   const tokenRecoil = tokenRecoilTabDef();
   const tokenDollyZoom = tokenDollyZoomTabDef();
 
@@ -118,6 +125,7 @@ export function buildGroups() {
       tabs: [
         tokenOsc,
         relabelTab(tokenLaser, "Token Tether"),
+        relabelTab(tokenBeam, "Token Laser"),
         tokenRecoil,
         tokenDollyZoom
       ]

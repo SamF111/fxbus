@@ -1,0 +1,441 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tokenBeamTab.hbs --}}
+
+<p class="fxbus-muted">
+  Token Laser projects beams or projectile shots from selected tokens. Single uses token[0]. Apply to All uses every selected token. First to Rest makes token[0] aim at the rest.
+</p>
+
+<p class="fxbus-muted" data-token-beam-selection-summary>
+  Selected tokens: none
+</p>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Mode</label>
+    <select name="tokenBeamMode">
+      <option value="continuous" selected>Continuous beam</option>
+      <option value="projectile">Projectile shot</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Selection</label>
+    <select name="tokenBeamSelectionMode">
+      <option value="single" selected>Single - token[0]</option>
+      <option value="all">Apply to All</option>
+      <option value="firstToRest">First to Rest</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Length / range (px)</label>
+    <input
+      type="number"
+      name="tokenBeamLengthPx"
+      value="900"
+      step="10"
+      min="1"
+      max="10000"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Layer</label>
+    <select name="tokenBeamLayerMode">
+      <option value="split" selected>Split</option>
+      <option value="above">Above tokens</option>
+      <option value="below">Below tokens</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Angle mode</label>
+    <select name="tokenBeamAngleMode">
+      <option value="absolute" selected>Absolute angle</option>
+      <option value="tokenRotationOffset">Token rotation + offset</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label>Angle / offset</label>
+    <input
+      type="number"
+      name="tokenBeamAngleDeg"
+      value="0"
+      step="1"
+      min="-3600"
+      max="3600"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="tokenBeamTrackTarget" checked/>
+      Track target
+    </label>
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="tokenBeamStopAtTarget"/>
+      Cap at target
+    </label>
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Projectile settings
+  </summary>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Speed (px/s)</label>
+      <input
+        type="number"
+        name="tokenBeamProjectileSpeedPx"
+        value="1200"
+        step="50"
+        min="1"
+        max="20000"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Trail length (px)</label>
+      <input
+        type="number"
+        name="tokenBeamProjectileTrailPx"
+        value="220"
+        step="10"
+        min="1"
+        max="10000"
+      />
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Impact linger (ms)</label>
+      <input
+        type="number"
+        name="tokenBeamProjectileImpactLingerMs"
+        value="180"
+        step="25"
+        min="0"
+        max="10000"
+      />
+    </div>
+
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamProjectileStopOnImpact" checked/>
+        Stop on impact
+      </label>
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label class="fxbus-inline">
+      <input type="checkbox" name="tokenBeamProjectileFireAndForget" checked/>
+      Fire and forget
+    </label>
+    <p class="fxbus-muted">
+      Fire and forget locks the shot direction when fired. Disable it for a homing-style shot.
+    </p>
+  </div>
+</details>
+
+<hr class="fxbus-divider"/>
+
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Colour and width
+  </summary>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Beam colour</label>
+      <div class="fxbus-inline">
+        <input type="color" name="tokenBeamColourPicker" value="#ff2222"/>
+        <input type="text" name="tokenBeamColour" value="#ff2222" placeholder="#rrggbb"/>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Core colour</label>
+      <div class="fxbus-inline">
+        <input type="color" name="tokenBeamCoreColourPicker" value="#ffffff"/>
+        <input type="text" name="tokenBeamCoreColour" value="#ffffff" placeholder="#rrggbb"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Glow colour</label>
+      <div class="fxbus-inline">
+        <input type="color" name="tokenBeamGlowColourPicker" value="#ff2222"/>
+        <input type="text" name="tokenBeamGlowColour" value="#ff2222" placeholder="#rrggbb"/>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Flow colour</label>
+      <div class="fxbus-inline">
+        <input type="color" name="tokenBeamFlowColourPicker" value="#ffffff"/>
+        <input type="text" name="tokenBeamFlowColour" value="#ffffff" placeholder="#rrggbb"/>
+      </div>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Width (px)</label>
+      <input
+        type="number"
+        name="tokenBeamWidth"
+        value="14"
+        step="0.5"
+        min="1"
+        max="120"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Core width (px)</label>
+      <input
+        type="number"
+        name="tokenBeamCoreWidth"
+        value="4"
+        step="0.5"
+        min="0.5"
+        max="80"
+      />
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Alpha</label>
+    <input
+      type="number"
+      name="tokenBeamAlpha"
+      value="0.95"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</details>
+
+<hr class="fxbus-divider"/>
+
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Appearance
+  </summary>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamGlow" checked/>
+        Glow
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamPulse" checked/>
+        Pulse
+      </label>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Pulse speed</label>
+      <input
+        type="number"
+        name="tokenBeamPulseSpeed"
+        value="2.5"
+        step="0.1"
+        min="0"
+        max="30"
+      />
+    </div>
+
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamMuzzleFlare" checked/>
+        Muzzle flare
+      </label>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamImpactFlare" checked/>
+        Impact flare
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label>Start offset (px)</label>
+      <input
+        type="number"
+        name="tokenBeamStartOffsetPx"
+        value="0"
+        step="1"
+        min="0"
+        max="1000"
+      />
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>End offset (px)</label>
+    <input
+      type="number"
+      name="tokenBeamEndOffsetPx"
+      value="0"
+      step="1"
+      min="0"
+      max="1000"
+    />
+  </div>
+</details>
+
+<hr class="fxbus-divider"/>
+
+<details class="fxbus-advanced">
+  <summary style="cursor:pointer; font-weight:600;">
+    Instability and flow
+  </summary>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Edge noise (px)</label>
+      <input
+        type="number"
+        name="tokenBeamEdgeNoisePx"
+        value="4"
+        step="0.5"
+        min="0"
+        max="100"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Edge speed</label>
+      <input
+        type="number"
+        name="tokenBeamEdgeNoiseHz"
+        value="18"
+        step="0.5"
+        min="0"
+        max="80"
+      />
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Edge segments</label>
+      <input
+        type="number"
+        name="tokenBeamEdgeSegments"
+        value="16"
+        step="1"
+        min="2"
+        max="96"
+      />
+    </div>
+
+    <div class="form-group">
+      <label class="fxbus-inline" style="margin-top:22px;">
+        <input type="checkbox" name="tokenBeamFlow" checked/>
+        Flow
+      </label>
+    </div>
+  </div>
+
+  <div class="fxbus-grid-2">
+    <div class="form-group">
+      <label>Flow speed</label>
+      <input
+        type="number"
+        name="tokenBeamFlowSpeed"
+        value="2"
+        step="0.1"
+        min="-30"
+        max="30"
+      />
+    </div>
+
+    <div class="form-group">
+      <label>Flow count</label>
+      <input
+        type="number"
+        name="tokenBeamFlowCount"
+        value="7"
+        step="1"
+        min="0"
+        max="80"
+      />
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Flow size (px, 0 = auto)</label>
+    <input
+      type="number"
+      name="tokenBeamFlowSize"
+      value="0"
+      step="0.5"
+      min="0"
+      max="100"
+    />
+  </div>
+</details>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label class="fxbus-inline" style="margin-top:22px;">
+      <input type="checkbox" name="tokenBeamUntilStopped" checked/>
+      Run until stopped
+    </label>
+  </div>
+
+  <div class="form-group">
+    <label>Duration (ms)</label>
+    <input
+      type="number"
+      name="tokenBeamDurationMs"
+      value="1500"
+      step="50"
+      min="1"
+      max="600000"
+    />
+  </div>
+</div>
+
+<hr class="fxbus-divider"/>
+
+<div class="fxbus-row">
+  <button type="button" class="fxbus-do" data-do="tokenBeamApply">Apply</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenBeamStopSelected">Stop Selected</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenBeamStopAll">Stop All</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
+</div>

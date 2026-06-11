@@ -9,6 +9,7 @@
  *   navigation, macro copying, and diagnostics to focused panel modules.
  * - Wire each tab definition to the rendered form.
  * - Persist active category and active tab per client.
+ * - Display the live FX Bus module version in the window title.
  *
  * DOM lifecycle:
  * - Foundry destroys the panel DOM on close.
@@ -59,12 +60,55 @@ import {
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+function getFxBusModuleVersion() {
+  /**
+   * Large comment:
+   * Read the FX Bus version from live runtime or Foundry module metadata.
+   *
+   * Do not hardcode the panel title version. During development and release
+   * packaging, module.json is the source of truth. The runtime version is checked
+   * first because FX Bus already exposes module metadata there after startup.
+   */
+  const runtimeVersion = String(globalThis.fxbus?.version ?? "").trim();
+
+  if (runtimeVersion.length > 0) return runtimeVersion;
+
+  const module = globalThis.game?.modules?.get?.(MODULE_ID);
+
+  const candidates = [
+    module?.version,
+    module?.manifest?.version
+  ];
+
+  for (const candidate of candidates) {
+    const version = String(candidate ?? "").trim();
+    if (version.length > 0) return version;
+  }
+
+  return "";
+}
+
+function getFxBusWindowTitle() {
+  /**
+   * Large comment:
+   * Build the GM control panel title from live module metadata.
+   *
+   * If the version cannot be resolved for any reason, fall back to the stable
+   * title rather than showing a broken or placeholder version string.
+   */
+  const version = getFxBusModuleVersion();
+
+  if (!version) return "FX Bus - GM Control Panel";
+
+  return `FX Bus v${version} - GM Control Panel`;
+}
+
 class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static DEFAULT_OPTIONS = {
     id: "fxbus-gm-control-panel",
     tag: "div",
     classes: ["fxbus-panel-app"],
-    window: { title: "FX Bus - GM Control Panel", resizable: true },
+    window: { title: getFxBusWindowTitle(), resizable: true },
     position: { width: 680, height: "auto" },
     actions: {
       fxbusDoReset: FxBusGmControlPanelApp._actionDoReset,
@@ -158,6 +202,20 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     const runtime = globalThis.fxbus;
     const root = this.element?.querySelector?.("form.fxbus-panel");
     if (!root) return;
+
+    /**
+     * Large comment:
+     * Refresh the window title on render.
+     *
+     * DEFAULT_OPTIONS is evaluated when this module is loaded. Updating again on
+     * render makes the title robust if Foundry module metadata or FX Bus runtime
+     * metadata becomes available slightly later during startup.
+     */
+    try {
+      this.window.title = getFxBusWindowTitle();
+    } catch {
+      // ignore
+    }
 
     /**
      * Large comment:

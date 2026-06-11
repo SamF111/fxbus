@@ -49,6 +49,15 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'tokenBeam'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="tokenBeam"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenBeamTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'recoil'))}}active{{/if}}"
           data-group="fxbus"
           data-category="token"
