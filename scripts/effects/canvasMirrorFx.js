@@ -68,8 +68,11 @@
  * - Canvas Mirror uses global capture listeners for pointer/mouse remapping.
  * - Events inside the FX Bus panel are hard-exempted before any preventDefault()
  *   or stopImmediatePropagation() call.
+ * - Other Foundry and module UI remains clickable because mouse compatibility
+ *   events are only suppressed after they are proven to belong to the canvas.
  * - This keeps Start, Stop, Copy to Macro, category tabs, sub-tabs, panel
- *   dragging, and panel resizing usable while the canvas is mirrored.
+ *   dragging, panel resizing, scene controls, and third-party module buttons
+ *   usable while the canvas is mirrored.
  *
  * User-facing UI:
  * - No warning/status popup is shown on the canvas.
@@ -663,6 +666,16 @@ function interceptMouseEvent(event, state) {
   if (eventPathContainsFxBusUi(event)) return;
   if (isSyntheticCanvasMirrorEvent(event)) return;
 
+  /**
+   * Large comment:
+   * Mouse compatibility events are global browser events. They must not be
+   * suppressed just because a recent pointer event touched the canvas. First
+   * prove that this event belongs to the canvas interaction stream. This keeps
+   * Foundry UI, the left scene controls, and unknown module buttons clickable
+   * without maintaining a brittle selector whitelist.
+   */
+  if (!eventBelongsToCanvas(event, state)) return;
+
   if (state.pointerSupported && performance.now() < state.suppressMouseUntil) {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -684,8 +697,6 @@ function interceptMouseEvent(event, state) {
 
     return;
   }
-
-  if (!eventBelongsToCanvas(event, state)) return;
 
   if (
     event.type === "mouseover" ||
