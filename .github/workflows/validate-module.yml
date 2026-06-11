@@ -127,6 +127,24 @@ jobs:
             exit 1
           fi
 
+      - name: Validate expected folders exist
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected_dirs=(
+            "scripts"
+            "styles"
+            "templates"
+          )
+
+          for dir in "${expected_dirs[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "::error::Expected folder missing: $dir"
+              exit 1
+            fi
+          done
+
       - name: JavaScript syntax check
         shell: bash
         run: |
@@ -251,25 +269,6 @@ jobs:
 
           python3 /tmp/check-hbs-partials.py
 
-      - name: Validate expected folders exist
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          expected_dirs=(
-            "assets"
-            "scripts"
-            "styles"
-            "templates"
-          )
-
-          for dir in "${expected_dirs[@]}"; do
-            if [ ! -d "$dir" ]; then
-              echo "::error::Expected folder missing: $dir"
-              exit 1
-            fi
-          done
-
       - name: Build validation zip
         shell: bash
         run: |
@@ -277,14 +276,21 @@ jobs:
 
           rm -f fxbus.zip
 
-          zip -r fxbus.zip \
-            module.json \
-            README.md \
-            LICENSE \
-            assets \
-            scripts \
-            styles \
-            templates \
+          zip_args=(
+            fxbus.zip
+            module.json
+            README.md
+            LICENSE
+            scripts
+            styles
+            templates
+          )
+
+          if [ -d "assets" ]; then
+            zip_args+=(assets)
+          fi
+
+          zip -r "${zip_args[@]}" \
             -x "*.git*" \
             -x "*.github*"
 
