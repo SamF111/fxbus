@@ -85,6 +85,15 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileRotation'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileRotation"
+        >
+          {{> "modules/fxbus/templates/tabs/tileRotationTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileFlicker'))}}active{{/if}}"
           data-group="fxbus"
           data-category="tile"

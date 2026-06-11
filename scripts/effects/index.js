@@ -34,6 +34,7 @@ import { registerScreenRotateFx } from "./screenRotateFx.js";
 import { registerCanvasMirrorFx } from "./canvasMirrorFx.js";
 
 import { registerTileOscillationFx } from "./tileOscillationFx.js";
+import { registerTileRotationFx } from "./tileRotationFx.js";
 import { registerTileFlickerFx } from "./tileFlickerFx.js";
 import { registerTileFlowFx } from "./tileFlowFx.js";
 
@@ -89,8 +90,13 @@ export function registerBuiltInEffects(runtime) {
   /**
    * Large comment:
    * Register stable production tile effects.
+   *
+   * Tile Rotation is an indefinite visual-only tile rotation effect intended for
+   * orbiting props, gears, fans, magic circles, rotating planets, and similar
+   * environmental motion.
    */
   registerTileOscillationFx(runtime);
+  registerTileRotationFx(runtime);
   registerTileFlickerFx(runtime);
   registerTileFlowFx(runtime);
 

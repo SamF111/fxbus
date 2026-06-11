@@ -25,6 +25,7 @@ import { tokenRecoilTabDef } from "../tabs/tokenRecoilTab.js";
 import { tokenDollyZoomTabDef } from "../tabs/tokenDollyZoomTab.js";
 
 import { tileOscTabDef } from "../tabs/tileOscTab.js";
+import { tileRotationTabDef } from "../tabs/tileRotationTab.js";
 import { tileFlickerTabDef } from "../tabs/tileFlickerTab.js";
 import { tileFlowTabDef } from "../tabs/tileFlowTab.js";
 
@@ -50,6 +51,7 @@ export const TAB_PARTIALS = [
   `modules/${MODULE_ID}/templates/tabs/tokenRecoilTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tokenDollyZoomTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileOscTab.hbs`,
+  `modules/${MODULE_ID}/templates/tabs/tileRotationTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileFlickerTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/tileFlowTab.hbs`,
   `modules/${MODULE_ID}/templates/tabs/screenShakeTab.hbs`,
@@ -102,6 +104,7 @@ export function buildGroups() {
   const tokenDollyZoom = tokenDollyZoomTabDef();
 
   const tileOsc = tileOscTabDef();
+  const tileRotation = tileRotationTabDef();
   const tileFlicker = tileFlickerTabDef();
   const tileFlow = tileFlowTabDef();
 
@@ -135,6 +138,7 @@ export function buildGroups() {
       label: "Tile",
       tabs: [
         tileOsc,
+        tileRotation,
         tileFlicker,
         tileFlow
       ]

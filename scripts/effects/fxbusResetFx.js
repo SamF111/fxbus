@@ -38,6 +38,7 @@ const TOKEN_BEAM_HARD_RESET = "fx.tokenBeam.hardReset";
 // Tile stop actions
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
 const TILE_OSC_STOP_LEGACY = "tileOscStop";
+const TILE_ROTATION_STOP = "fx.tileRotation.stop";
 const TILE_FLICKER_STOP = "fx.tileFlicker.stop";
 const TILE_FLOW_STOP = "fx.tileFlow.stop";
 
@@ -227,11 +228,15 @@ function buildForcedTileResetPayload(action, tileIds) {
    * Tile Flow supports stopMode. A normal user stop may intentionally retain the
    * current flow phase. Global reset must not retain anything, so it always sends
    * stopMode "reset" and forceReset true.
+   *
+   * The extra reset flags are harmless for tile effects that ignore them.
    */
   const payload = {
     action,
     stopMode: "reset",
-    forceReset: true
+    forceReset: true,
+    immediate: true,
+    restore: true
   };
 
   if (Array.isArray(tileIds) && tileIds.length > 0) {
@@ -343,7 +348,7 @@ function onReset(runtime) {
    * 2. Stop Token Dolly Zoom before ticker cleanup so it can restore canvas and token visual snapshots.
    * 3. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
    * 4. Hard-reset token beam containers to remove orphaned PIXI graphics on desynchronised clients.
-   * 5. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
+   * 5. Stop tile transform effects using explicit tileIds so direct tile render-object snapshots restore.
    * 6. Force Tile Flow to reset rather than retain final phase.
    * 7. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
    * 8. Stop canvas-output effects so DOM canvas transforms and event interception are removed.
@@ -390,22 +395,33 @@ function onReset(runtime) {
 
   if (tileIds.length > 0) {
     if (hasHandler(runtime, TILE_OSC_STOP)) {
-      safeCallHandler(runtime, TILE_OSC_STOP, {
-        action: TILE_OSC_STOP,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_OSC_STOP,
+        buildForcedTileResetPayload(TILE_OSC_STOP, tileIds)
+      );
     } else if (hasHandler(runtime, TILE_OSC_STOP_LEGACY)) {
-      safeCallHandler(runtime, TILE_OSC_STOP_LEGACY, {
-        action: TILE_OSC_STOP_LEGACY,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_OSC_STOP_LEGACY,
+        buildForcedTileResetPayload(TILE_OSC_STOP_LEGACY, tileIds)
+      );
+    }
+
+    if (hasHandler(runtime, TILE_ROTATION_STOP)) {
+      safeCallHandler(
+        runtime,
+        TILE_ROTATION_STOP,
+        buildForcedTileResetPayload(TILE_ROTATION_STOP, tileIds)
+      );
     }
 
     if (hasHandler(runtime, TILE_FLICKER_STOP)) {
-      safeCallHandler(runtime, TILE_FLICKER_STOP, {
-        action: TILE_FLICKER_STOP,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_FLICKER_STOP,
+        buildForcedTileResetPayload(TILE_FLICKER_STOP, tileIds)
+      );
     }
 
     if (hasHandler(runtime, TILE_FLOW_STOP)) {
@@ -416,13 +432,23 @@ function onReset(runtime) {
       );
     }
   } else {
-    stopIfPresent(runtime, TILE_OSC_STOP, {
-      action: TILE_OSC_STOP
-    });
+    stopIfPresent(
+      runtime,
+      TILE_OSC_STOP,
+      buildForcedTileResetPayload(TILE_OSC_STOP)
+    );
 
-    stopIfPresent(runtime, TILE_FLICKER_STOP, {
-      action: TILE_FLICKER_STOP
-    });
+    stopIfPresent(
+      runtime,
+      TILE_ROTATION_STOP,
+      buildForcedTileResetPayload(TILE_ROTATION_STOP)
+    );
+
+    stopIfPresent(
+      runtime,
+      TILE_FLICKER_STOP,
+      buildForcedTileResetPayload(TILE_FLICKER_STOP)
+    );
 
     stopIfPresent(
       runtime,
