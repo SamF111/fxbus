@@ -1,3 +1,5 @@
+{{!-- D:\FoundryVTT\Data\modules\fxbus\templates\fxbus-panel.hbs --}}
+
 <form class="fxbus-panel" data-fxbus-root="1">
   <div class="fxbus-panel-layout">
     <nav class="fxbus-category-rail" aria-label="FX Bus categories">
@@ -47,6 +49,15 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'tokenBeam'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="tokenBeam"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenBeamTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'recoil'))}}active{{/if}}"
           data-group="fxbus"
           data-category="token"
@@ -56,12 +67,30 @@
         </section>
 
         <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'tokenDollyZoom'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="token"
+          data-tab="tokenDollyZoom"
+        >
+          {{> "modules/fxbus/templates/tabs/tokenDollyZoomTab.hbs"}}
+        </section>
+
+        <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileOsc'))}}active{{/if}}"
           data-group="fxbus"
           data-category="tile"
           data-tab="tileOsc"
         >
           {{> "modules/fxbus/templates/tabs/tileOscTab.hbs"}}
+        </section>
+
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'tile') (eq activeTab 'tileRotation'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="tile"
+          data-tab="tileRotation"
+        >
+          {{> "modules/fxbus/templates/tabs/tileRotationTab.hbs"}}
         </section>
 
         <section
@@ -170,6 +199,15 @@
           data-tab="rotate"
         >
           {{> "modules/fxbus/templates/tabs/screenRotateTab.hbs"}}
+        </section>
+
+        <section
+          class="tab fxbus-panel-section {{#if (and (eq activeCategory 'canvas') (eq activeTab 'canvasMirror'))}}active{{/if}}"
+          data-group="fxbus"
+          data-category="canvas"
+          data-tab="canvasMirror"
+        >
+          {{> "modules/fxbus/templates/tabs/canvasMirrorTab.hbs"}}
         </section>
 
         <section

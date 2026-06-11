@@ -6,6 +6,8 @@
  * Compatibility goals:
  * - Drag-safe: never touch token.x/y or the Token container position.
  * - Z Scatter-safe: do not reparent token.mesh/icon, and do not animate position.
+ * - Idle Token Movements-safe: expose a small cooperative API and hooks so idle
+ *   animation can yield before FX Bus snapshots and animates the token.
  *
  * Implementation:
  * - Animate ONLY:
@@ -14,6 +16,11 @@
  * - Snapshot + restore:
  *   - pivot, rotation, scale
  *   - visible/renderable/alpha (prevents "stuck invisible" if another module toggles state and never restores due to transform contention)
+ *
+ * Cooperative API:
+ * - globalThis.fxbusTokenOscillation.isActive(tokenId)
+ * - Hooks.callAll("fxbusTokenOscillationWillStart", payload)
+ * - Hooks.callAll("fxbusTokenOscillationStopped", payload)
  *
  * Notes:
  * - Enforcing baseline visibility during oscillation may override other modules that intentionally hide the mesh
@@ -28,6 +35,9 @@ const EFFECT_NAME = "tokenOscillation";
 const ACTION_START = "fx.tokenOsc.start";
 const ACTION_UPDATE = "fx.tokenOsc.update";
 const ACTION_STOP = "fx.tokenOsc.stop";
+
+const HOOK_WILL_START = "fxbusTokenOscillationWillStart";
+const HOOK_STOPPED = "fxbusTokenOscillationStopped";
 
 // FNV-1a 32-bit hash constants
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;
@@ -57,6 +67,8 @@ const JITTER_ROT = 0.15;
 export function registerTokenOscillationFx(runtime) {
   if (!runtime?.handlers) throw new Error("[FX Bus] tokenOscillationFx: invalid runtime.");
 
+  installPublicTokenOscillationApi(runtime);
+
   runtime.handlers.set(ACTION_START, (msg) => onStart(runtime, msg));
   runtime.handlers.set(ACTION_UPDATE, (msg) => onUpdate(runtime, msg));
   runtime.handlers.set(ACTION_STOP, (msg) => onStop(runtime, msg));
@@ -71,6 +83,80 @@ export function registerTokenOscillationFx(runtime) {
 function getEffectMap(runtime) {
   if (!runtime.tokenFx.has(EFFECT_NAME)) runtime.tokenFx.set(EFFECT_NAME, new Map());
   return runtime.tokenFx.get(EFFECT_NAME);
+}
+
+/**
+ * Install a small public API for future cooperative modules.
+ *
+ * @param {object} runtime
+ */
+function installPublicTokenOscillationApi(runtime) {
+  /**
+   * Large comment:
+   * Expose the minimum needed by standalone idle animation modules.
+   *
+   * Idle Token Movements can:
+   * - Listen for fxbusTokenOscillationWillStart to restore/pause itself before
+   *   FX Bus snapshots the token baseline.
+   * - Call isActive(tokenId) before writing pivot or rotation.
+   * - Listen for fxbusTokenOscillationStopped to resume if appropriate.
+   */
+  globalThis.fxbusTokenOscillation = {
+    isActive(tokenId) {
+      const id = String(tokenId ?? "").trim();
+      if (!id) return false;
+
+      return getEffectMap(runtime).has(id);
+    },
+
+    hooks: {
+      willStart: HOOK_WILL_START,
+      stopped: HOOK_STOPPED
+    }
+  };
+
+  runtime.__fxbusIsTokenOscillating = (tokenId) => {
+    return globalThis.fxbusTokenOscillation.isActive(tokenId);
+  };
+}
+
+/**
+ * Build a small cooperative hook payload.
+ *
+ * @param {string} tokenId
+ * @param {Token|null} token
+ * @param {PIXI.DisplayObject|null} target
+ * @returns {object}
+ */
+function makeHookPayload(tokenId, token, target) {
+  return {
+    moduleId: "fxbus",
+    effectName: EFFECT_NAME,
+    tokenId,
+    token,
+    target
+  };
+}
+
+/**
+ * Call a cooperative hook defensively.
+ *
+ * @param {string} hookName
+ * @param {object} payload
+ */
+function callCooperativeHook(hookName, payload) {
+  try {
+    Hooks?.callAll?.(hookName, payload);
+  } catch (err) {
+    console.warn("[FX Bus] Token Oscillation cooperative hook failed.", {
+      hookName,
+      tokenId: payload?.tokenId,
+      errorName: err?.name,
+      errorMessage: err?.message,
+      errorStack: err?.stack,
+      err
+    });
+  }
 }
 
 /**
@@ -251,6 +337,16 @@ function onStart(runtime, msg) {
       continue;
     }
 
+    /**
+     * Large comment:
+     * Give cooperative idle modules one synchronous chance to restore/pause
+     * their own transform offsets before FX Bus snapshots the baseline.
+     */
+    callCooperativeHook(
+      HOOK_WILL_START,
+      makeHookPayload(tokenId, token, target)
+    );
+
     const base = snapshotBase(target);
     if (!base) continue;
 
@@ -293,12 +389,25 @@ function onStop(runtime, msg) {
     if (!state) continue;
 
     const token = canvas?.tokens?.get(tokenId);
+    let target = null;
+
     if (token) {
-      const target = getTokenOscTarget(token);
+      target = getTokenOscTarget(token);
       if (target) restoreBase(target, state.base);
     }
 
     fxMap.delete(tokenId);
+
+    /**
+     * Large comment:
+     * Notify cooperative idle modules after FX Bus has restored and removed its
+     * active state. At this point isActive(tokenId) returns false, so a listener
+     * may safely resume idle motion if appropriate.
+     */
+    callCooperativeHook(
+      HOOK_STOPPED,
+      makeHookPayload(tokenId, token ?? null, target)
+    );
   }
 
   if (fxMap.size === 0) cleanupTicker(runtime, EFFECT_NAME);

@@ -29,12 +29,16 @@ const ACTION_RESET = "fx.bus.reset";
 const TOKEN_OSC_STOP = "fx.tokenOsc.stop";
 const TOKEN_OSC_STOP_LEGACY = "tokenOscStop";
 const TOKEN_RECOIL_STOP = "fx.tokenRecoil.stop";
+const TOKEN_DOLLY_ZOOM_STOP = "fx.tokenDollyZoom.stop";
 const TOKEN_LASER_STOP_ALL = "fx.tokenLaser.stopAll";
 const TOKEN_LASER_HARD_RESET = "fx.tokenLaser.hardReset";
+const TOKEN_BEAM_STOP_ALL = "fx.tokenBeam.stopAll";
+const TOKEN_BEAM_HARD_RESET = "fx.tokenBeam.hardReset";
 
 // Tile stop actions
 const TILE_OSC_STOP = "fx.tileOscillation.stop";
 const TILE_OSC_STOP_LEGACY = "tileOscStop";
+const TILE_ROTATION_STOP = "fx.tileRotation.stop";
 const TILE_FLICKER_STOP = "fx.tileFlicker.stop";
 const TILE_FLOW_STOP = "fx.tileFlow.stop";
 
@@ -50,6 +54,9 @@ const SCREEN_SMEAR_STOP = "fx.screenSmear.stop";
 const SCREEN_STREAK_STOP = "fx.screenStreak.stop";
 const SCREEN_MONOCHROME_STOP = "fx.screenMonochrome.stop";
 const SCREEN_COLOUR_SHIFT_STOP = "fx.screenColourShift.stop";
+
+// Canvas stop actions
+const CANVAS_MIRROR_STOP = "fx.canvasMirror.stop";
 
 export function registerFxbusResetFx(runtime) {
   if (!runtime?.handlers) {
@@ -79,6 +86,25 @@ function safeCallHandler(runtime, action, payload) {
     fn(payload ?? { action });
   } catch (err) {
     console.error("[FX Bus] reset: handler threw", { action, err });
+  }
+}
+
+function safeCallHelper(runtime, helperName) {
+  /**
+   * Large comment:
+   * Call an optional reset helper exposed directly on the runtime.
+   *
+   * This is a defensive fallback for effects that expose an implementation-level
+   * hard reset helper in addition to their normal action handlers.
+   */
+  const fn = runtime?.[helperName];
+
+  if (typeof fn !== "function") return;
+
+  try {
+    fn();
+  } catch (err) {
+    console.error("[FX Bus] reset: helper threw", { helperName, err });
   }
 }
 
@@ -202,11 +228,15 @@ function buildForcedTileResetPayload(action, tileIds) {
    * Tile Flow supports stopMode. A normal user stop may intentionally retain the
    * current flow phase. Global reset must not retain anything, so it always sends
    * stopMode "reset" and forceReset true.
+   *
+   * The extra reset flags are harmless for tile effects that ignore them.
    */
   const payload = {
     action,
     stopMode: "reset",
-    forceReset: true
+    forceReset: true,
+    immediate: true,
+    restore: true
   };
 
   if (Array.isArray(tileIds) && tileIds.length > 0) {
@@ -232,18 +262,98 @@ function buildForcedScreenResetPayload(action) {
   };
 }
 
+function buildForcedTokenResetPayload(action) {
+  /**
+   * Large comment:
+   * Build a token reset payload that asks effects to restore their baseline
+   * immediately where supported.
+   *
+   * Token Dolly Zoom stores its own snapshots and restores them through its stop
+   * handler. The extra flags are harmless if ignored.
+   */
+  return {
+    action,
+    reset: true,
+    forceReset: true,
+    immediate: true,
+    restore: true
+  };
+}
+
+function buildForcedCanvasResetPayload(action) {
+  /**
+   * Large comment:
+   * Build a canvas reset payload that asks DOM/canvas-output effects to restore
+   * immediately where supported.
+   *
+   * Canvas Mirror restores inline canvas element styles and removes its event
+   * interception through its own stop handler.
+   */
+  return {
+    action,
+    reset: true,
+    forceReset: true,
+    immediate: true,
+    restore: true
+  };
+}
+
+function resetTokenLaser(runtime) {
+  /**
+   * Large comment:
+   * Reset the older Token Laser implementation.
+   *
+   * This effect is currently the token-to-token tether/link implementation. It
+   * owns persistent PIXI containers and therefore needs both a normal stop-all
+   * and a hard reset to remove orphaned graphics.
+   */
+  stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
+    action: TOKEN_LASER_STOP_ALL
+  });
+
+  stopIfPresent(runtime, TOKEN_LASER_HARD_RESET, {
+    action: TOKEN_LASER_HARD_RESET
+  });
+}
+
+function resetTokenBeam(runtime) {
+  /**
+   * Large comment:
+   * Reset the newer Token Beam implementation.
+   *
+   * Token Beam owns persistent beam graphics and follows rendered token
+   * positions. It should be stopped explicitly before the final ticker/map
+   * backstop cleanup.
+   */
+  stopIfPresent(runtime, TOKEN_BEAM_STOP_ALL, {
+    action: TOKEN_BEAM_STOP_ALL
+  });
+
+  if (hasHandler(runtime, TOKEN_BEAM_HARD_RESET)) {
+    safeCallHandler(runtime, TOKEN_BEAM_HARD_RESET, {
+      action: TOKEN_BEAM_HARD_RESET
+    });
+    return;
+  }
+
+  safeCallHelper(runtime, "__fxbusTokenBeamHardReset");
+}
+
 function onReset(runtime) {
   /**
    * Large comment:
    * Global reset order matters:
    *
    * 1. Stop token effects using explicit handlers so token transforms and token-linked overlays restore.
-   * 2. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
-   * 3. Stop tile effects using explicit tileIds so direct tile render-object snapshots restore.
-   * 4. Force Tile Flow to reset rather than retain final phase.
-   * 5. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
-   * 6. Remove any residual tickers.
-   * 7. Clear runtime maps as a final backstop.
+   * 2. Stop Token Dolly Zoom before ticker cleanup so it can restore canvas and token visual snapshots.
+   * 3. Hard-reset token laser containers to remove orphaned PIXI graphics on desynchronised clients.
+   * 4. Hard-reset token beam containers to remove orphaned PIXI graphics on desynchronised clients.
+   * 5. Stop tile transform effects using explicit tileIds so direct tile render-object snapshots restore.
+   * 6. Force Tile Flow to reset rather than retain final phase.
+   * 7. Stop screen effects so stage offsets, rotations, filters, and overlays restore.
+   * 8. Stop canvas-output effects so DOM canvas transforms and event interception are removed.
+   * 9. Remove any residual tickers.
+   * 10. Clear runtime maps as a final backstop.
    */
   const tokenIds = collectIdsFromNestedFxMap(runtime.tokenFx);
 
@@ -272,34 +382,46 @@ function onReset(runtime) {
     });
   }
 
-  stopIfPresent(runtime, TOKEN_LASER_STOP_ALL, {
-    action: TOKEN_LASER_STOP_ALL
-  });
+  stopIfPresent(
+    runtime,
+    TOKEN_DOLLY_ZOOM_STOP,
+    buildForcedTokenResetPayload(TOKEN_DOLLY_ZOOM_STOP)
+  );
 
-  stopIfPresent(runtime, TOKEN_LASER_HARD_RESET, {
-    action: TOKEN_LASER_HARD_RESET
-  });
+  resetTokenLaser(runtime);
+  resetTokenBeam(runtime);
 
   const tileIds = collectIdsFromNestedFxMap(runtime.tileFx);
 
   if (tileIds.length > 0) {
     if (hasHandler(runtime, TILE_OSC_STOP)) {
-      safeCallHandler(runtime, TILE_OSC_STOP, {
-        action: TILE_OSC_STOP,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_OSC_STOP,
+        buildForcedTileResetPayload(TILE_OSC_STOP, tileIds)
+      );
     } else if (hasHandler(runtime, TILE_OSC_STOP_LEGACY)) {
-      safeCallHandler(runtime, TILE_OSC_STOP_LEGACY, {
-        action: TILE_OSC_STOP_LEGACY,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_OSC_STOP_LEGACY,
+        buildForcedTileResetPayload(TILE_OSC_STOP_LEGACY, tileIds)
+      );
+    }
+
+    if (hasHandler(runtime, TILE_ROTATION_STOP)) {
+      safeCallHandler(
+        runtime,
+        TILE_ROTATION_STOP,
+        buildForcedTileResetPayload(TILE_ROTATION_STOP, tileIds)
+      );
     }
 
     if (hasHandler(runtime, TILE_FLICKER_STOP)) {
-      safeCallHandler(runtime, TILE_FLICKER_STOP, {
-        action: TILE_FLICKER_STOP,
-        tileIds
-      });
+      safeCallHandler(
+        runtime,
+        TILE_FLICKER_STOP,
+        buildForcedTileResetPayload(TILE_FLICKER_STOP, tileIds)
+      );
     }
 
     if (hasHandler(runtime, TILE_FLOW_STOP)) {
@@ -310,13 +432,23 @@ function onReset(runtime) {
       );
     }
   } else {
-    stopIfPresent(runtime, TILE_OSC_STOP, {
-      action: TILE_OSC_STOP
-    });
+    stopIfPresent(
+      runtime,
+      TILE_OSC_STOP,
+      buildForcedTileResetPayload(TILE_OSC_STOP)
+    );
 
-    stopIfPresent(runtime, TILE_FLICKER_STOP, {
-      action: TILE_FLICKER_STOP
-    });
+    stopIfPresent(
+      runtime,
+      TILE_ROTATION_STOP,
+      buildForcedTileResetPayload(TILE_ROTATION_STOP)
+    );
+
+    stopIfPresent(
+      runtime,
+      TILE_FLICKER_STOP,
+      buildForcedTileResetPayload(TILE_FLICKER_STOP)
+    );
 
     stopIfPresent(
       runtime,
@@ -341,6 +473,12 @@ function onReset(runtime) {
     immediate: true,
     forceReset: true
   });
+
+  stopIfPresent(
+    runtime,
+    CANVAS_MIRROR_STOP,
+    buildForcedCanvasResetPayload(CANVAS_MIRROR_STOP)
+  );
 
   backstopTickerCleanup(runtime);
 

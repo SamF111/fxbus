@@ -25,7 +25,8 @@
  *   - keep Foundry in Tiles / Select
  *
  * - If clicked from any other control:
- *   - open Screen FX
+ *   - open the remembered Screen or Canvas FX category
+ *   - fall back to Screen FX if no remembered Screen/Canvas category exists
  *   - restore a safe native Token / Select state
  *
  * Important:
@@ -51,6 +52,10 @@
  */
 
 import { openFxBusGmControlPanel } from "./fxbusPanelApp.js";
+
+import {
+  readState
+} from "./panel/panelState.js";
 
 const HOOK_ID = "getSceneControlButtons";
 
@@ -293,24 +298,53 @@ function captureCurrentNativeControlSnapshot() {
   return lastNativeControlSnapshot;
 }
 
+function getRememberedStandaloneCategory() {
+  /**
+   * Large comment:
+   * Resolve the remembered non-layer FX Bus category for the standalone launcher.
+   *
+   * Token and Tile are controlled by the active native Foundry layer. When the
+   * user is not currently in Tokens or Tiles, the standalone launcher remembers
+   * whether the panel was last on Screen or Canvas. Reset is not restored because
+   * it is an action category rather than a normal browsing category.
+   */
+  const state = readState();
+  const category = String(state?.__activeCategory ?? "");
+
+  if (category === "canvas") return "canvas";
+  if (category === "screen") return "screen";
+
+  return "screen";
+}
+
 function getContextualLaunchSnapshot() {
   /**
    * Large comment:
-   * Determine which native Foundry control should be preserved when a standalone
-   * FX Bus launcher icon is clicked.
+   * Determine which FX Bus category should open when the standalone FX Bus
+   * launcher icon is clicked.
+   *
+   * Behaviour:
+   * - If the current native Foundry control is Tokens, open Token FX and restore
+   *   Tokens / Select.
+   * - If the current native Foundry control is Tiles, open Tile FX and restore
+   *   Tiles / Select.
+   * - If any other control is active, open the remembered Screen/Canvas category
+   *   and restore safe Tokens / Select.
    */
   const current = getCurrentControlName();
 
   if (isNativeControlName(current)) {
     return {
       control: current,
-      tool: SELECT_TOOL
+      tool: SELECT_TOOL,
+      category: getCategoryForControl(current)
     };
   }
 
   return {
-    ...lastNativeControlSnapshot,
-    tool: SELECT_TOOL
+    control: "token",
+    tool: SELECT_TOOL,
+    category: getRememberedStandaloneCategory()
   };
 }
 
@@ -507,16 +541,11 @@ function shouldIgnoreRepeatedStandaloneLaunch() {
 function restoreSnapshotControl(snapshot) {
   /**
    * Large comment:
-   * Restore the native Foundry control that was active when the standalone
-   * launcher was clicked.
+   * Restore the native Foundry control that should remain active after the
+   * standalone launcher is clicked.
    */
   if (snapshot?.control === "tiles") {
     restoreControlToolSoon("tiles", SELECT_TOOL);
-    return;
-  }
-
-  if (snapshot?.control === "token") {
-    restoreControlToolSoon("token", SELECT_TOOL);
     return;
   }
 
@@ -531,8 +560,10 @@ function handleStandaloneLauncherEvent(event) {
    *
    * This is the main Tile._refreshState fix:
    * - do not let Foundry activate a custom FX Bus control from Tiles
-   * - retain the current native control
-   * - open the matching FX Bus panel category or reset all FX
+   * - retain the current native control when coming from Tokens or Tiles
+   * - open the matching FX Bus panel category, or remembered Screen/Canvas FX
+   *   from any other control
+   * - reset all FX when using the standalone Reset All FX launcher
    */
   if (!game?.user?.isGM) return false;
 
@@ -548,7 +579,7 @@ function handleStandaloneLauncherEvent(event) {
   if (shouldIgnoreRepeatedStandaloneLaunch()) return true;
 
   if (kind === "fxbus") {
-    const category = getCategoryForControl(snapshot.control);
+    const category = String(snapshot.category ?? getCategoryForControl(snapshot.control));
 
     try {
       console.debug("[FX Bus] Contextual standalone launcher", {
@@ -632,7 +663,7 @@ function installStandaloneLauncherGuard() {
 function makeHiddenSafeTool(name, title, icon) {
   /**
    * Large comment:
-   * Provide an inert hidden tool for a standalone launcher control.
+   * Provide an inert safe tool for a standalone launcher control.
    *
    * Ideally this tool is never reached when clicking the top-level standalone
    * icon because the capture guard intercepts that click first. It remains here
