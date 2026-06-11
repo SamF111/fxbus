@@ -90,13 +90,16 @@
 }
 
 .fxbus-panel-app .fxbus-category-tab[data-category="reset"] {
-  margin-top: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-light-primary, rgba(128, 128, 128, 0.35));
   color: var(--color-text-danger, var(--color-text-primary));
 }
 
 .fxbus-panel-app .fxbus-category-tab[data-category="reset"].active {
   background: var(--color-bg-danger, rgba(0, 0, 0, 0.06));
   border-color: transparent;
+  border-top-color: var(--color-border-light-primary, rgba(128, 128, 128, 0.35));
   border-left: 3px solid var(--color-border-danger, var(--color-border-highlight));
 }
 
@@ -287,6 +290,19 @@
   .fxbus-panel-app .fxbus-category-tab.active {
     border-left: 1px solid var(--color-border-highlight);
     padding-left: 8px;
+  }
+
+  .fxbus-panel-app .fxbus-category-tab[data-category="reset"] {
+    margin-top: 0;
+    padding-top: 6px;
+    border-top-color: transparent;
+    margin-left: 8px;
+    border-left: 1px solid var(--color-border-light-primary, rgba(128, 128, 128, 0.35));
+  }
+
+  .fxbus-panel-app .fxbus-category-tab[data-category="reset"].active {
+    border-top-color: transparent;
+    border-left: 1px solid var(--color-border-danger, var(--color-border-highlight));
   }
 
   .fxbus-panel-app .fxbus-subtab {
