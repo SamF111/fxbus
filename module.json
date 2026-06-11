@@ -2,7 +2,7 @@
   "id": "fxbus",
   "title": "FX Bus",
   "description": "<p><strong>FX Bus</strong> adds GM-controlled cinematic visual effects to Foundry VTT.</p><p>Trigger screen shakes, pulses, blur, noise, tile motion, token motion, tethers, recoil, and other live visual effects from a dedicated control panel or reusable macros.</p><p>All effects are visual-only and reversible. FX Bus does not change your scenes, tokens, walls, actors, items, or world data.</p>",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "authors": [
     {
       "name": "mintchoc",
