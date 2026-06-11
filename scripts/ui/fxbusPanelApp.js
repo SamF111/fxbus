@@ -67,7 +67,7 @@ function getFxBusModuleVersion() {
    *
    * Do not hardcode the panel title version. During development and release
    * packaging, module.json is the source of truth. The runtime version is checked
-   * first because FX Bus already exposes module metadata there after startup.
+   * first because FX Bus may expose module metadata there after startup.
    */
   const runtimeVersion = String(globalThis.fxbus?.version ?? "").trim();
 
@@ -93,14 +93,14 @@ function getFxBusWindowTitle() {
    * Large comment:
    * Build the GM control panel title from live module metadata.
    *
-   * If the version cannot be resolved for any reason, fall back to the stable
-   * title rather than showing a broken or placeholder version string.
+   * Keep the title compact because Foundry window title bars are narrow,
+   * especially on 1080p displays and when panels are resized.
    */
   const version = getFxBusModuleVersion();
 
-  if (!version) return "FX Bus - GM Control Panel";
+  if (!version) return "FX Bus - GM Panel";
 
-  return `FX Bus v${version} - GM Control Panel`;
+  return `FX Bus - GM Panel [v${version}]`;
 }
 
 class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
@@ -108,7 +108,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     id: "fxbus-gm-control-panel",
     tag: "div",
     classes: ["fxbus-panel-app"],
-    window: { title: getFxBusWindowTitle(), resizable: true },
+    window: { title: "FX Bus - GM Control Panel", resizable: true },
     position: { width: 680, height: "auto" },
     actions: {
       fxbusDoReset: FxBusGmControlPanelApp._actionDoReset,
@@ -119,6 +119,18 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static PARTS = {
     body: { template: `modules/${MODULE_ID}/templates/fxbus-panel.hbs` }
   };
+
+  get title() {
+    /**
+     * Large comment:
+     * Provide ApplicationV2 with a dynamic title.
+     *
+     * ApplicationV2 reads the application title through this accessor. Keeping
+     * DEFAULT_OPTIONS.window.title as a stable fallback preserves normal window
+     * construction while this getter supplies the live versioned title.
+     */
+    return getFxBusWindowTitle();
+  }
 
   constructor(options = {}) {
     super(options);
@@ -205,14 +217,16 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     /**
      * Large comment:
-     * Refresh the window title on render.
+     * Refresh the rendered title-bar heading after every render.
      *
-     * DEFAULT_OPTIONS is evaluated when this module is loaded. Updating again on
-     * render makes the title robust if Foundry module metadata or FX Bus runtime
-     * metadata becomes available slightly later during startup.
+     * In ApplicationV2, this.window.title is the title heading element, not the
+     * title string. Setting textContent makes the update robust for re-renders,
+     * detached windows, and PopOut-style DOM moves.
      */
     try {
-      this.window.title = getFxBusWindowTitle();
+      if (this.window?.title) {
+        this.window.title.textContent = this.title;
+      }
     } catch {
       // ignore
     }
