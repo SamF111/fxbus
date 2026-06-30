@@ -516,6 +516,58 @@ function syncOverlayTransformToTileObject(state, object) {
   resetOverlayGeometryToDocumentShape(state);
 }
 
+function normaliseExternalVisualTransform(transform) {
+  /**
+   * Large comment:
+   * Normalise a transform supplied by another visual-only tile effect.
+   *
+   * Tile Flow owns the overlay container while it is active. Other effects, such
+   * as Tile Rotation, may need to compose an additional visual transform on top
+   * of Tile Flow's base sync-to-tile transform. The override is deliberately
+   * local render state only; it is never written back to the TileDocument.
+   */
+  if (!transform || typeof transform !== "object") return null;
+
+  const x = Number(transform.x);
+  const y = Number(transform.y);
+  const rotation = Number(transform.rotation);
+
+  if (![x, y, rotation].every(Number.isFinite)) return null;
+
+  return {
+    x,
+    y,
+    rotation
+  };
+}
+
+function applyExternalVisualTransform(state) {
+  /**
+   * Large comment:
+   * Re-apply a composed visual transform after Tile Flow has synchronised its
+   * overlay back to the underlying tile render object.
+   *
+   * Without this hook, Tile Flow's ticker can overwrite Tile Rotation's overlay
+   * transform on whichever client happens to tick Flow after Rotation. Keeping
+   * the composition here makes the result deterministic in both Foundry v13 and
+   * Foundry v14.
+   */
+  const transform = normaliseExternalVisualTransform(state?.externalVisualTransform);
+  const container = state?.container;
+
+  if (!transform || !container || container.destroyed) return false;
+
+  try {
+    container.x = transform.x;
+    container.y = transform.y;
+    container.rotation = transform.rotation;
+    return true;
+  } catch (err) {
+    console.warn("[FX Bus] Tile Flow: failed to apply external visual transform.", err);
+    return false;
+  }
+}
+
 function createSubTexture(sourceTexture, x, y, width, height) {
   /**
    * Large comment:
@@ -1023,6 +1075,7 @@ function syncOverlayToTile(state) {
   if (!insertOverlayBesideTileObject(state)) return false;
 
   syncOverlayTransformToTileObject(state, object);
+  applyExternalVisualTransform(state);
 
   if (shapeChanged) {
     setSpriteTilePosition(state);
@@ -1497,6 +1550,8 @@ function startOrUpdate(runtime, payload) {
       originalObjectAlpha: 1,
       originalObjectAlphaCaptured: false,
 
+      externalVisualTransform: null,
+
       status: STATUS_RUNNING
     };
 
@@ -1583,6 +1638,47 @@ export function getTileFlowVisualObject(runtime, tileId) {
   if (!state?.container || state.container.destroyed) return null;
 
   return state.container;
+}
+
+export function setTileFlowVisualTransformOverride(runtime, tileId, transform) {
+  /**
+   * Large comment:
+   * Store a composed visual transform for Tile Flow's overlay container.
+   *
+   * This exists for effects that need to transform the visible representation of
+   * a tile while Tile Flow owns that representation. Tile Rotation uses this so
+   * anchor rotation remains stable even if Tile Flow's ticker runs after Tile
+   * Rotation's ticker on a given frame.
+   */
+  const state = getTileFlowState(runtime, tileId);
+
+  if (!state?.container || state.container.destroyed) return false;
+
+  const normalised = normaliseExternalVisualTransform(transform);
+  if (!normalised) return false;
+
+  state.externalVisualTransform = normalised;
+  applyExternalVisualTransform(state);
+
+  return true;
+}
+
+export function clearTileFlowVisualTransformOverride(runtime, tileId) {
+  /**
+   * Large comment:
+   * Remove a previously stored composed transform from Tile Flow's overlay.
+   *
+   * The next Tile Flow sync returns the overlay to the underlying tile render
+   * object's transform. This is used when Tile Rotation stops with restoration
+   * enabled or when Rotation no longer targets the Tile Flow overlay.
+   */
+  const state = getTileFlowState(runtime, tileId);
+
+  if (!state) return false;
+
+  state.externalVisualTransform = null;
+
+  return true;
 }
 
 export function hasTileFlowVisual(runtime, tileId) {
