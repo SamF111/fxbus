@@ -29,6 +29,14 @@
 
 import { ensureTicker, cleanupTicker } from "../ticker.js";
 import { clamp, degToRad } from "../utils.js";
+import {
+  getMotionSyncPhaseRad,
+  joinMotionSyncGroup,
+  leaveMotionSyncGroup,
+  normaliseSyncGroup,
+  normaliseSyncPhaseDeg,
+  sampleMotionSyncWaves
+} from "./shared/motionSync.js";
 
 const EFFECT_NAME = "tokenOscillation";
 
@@ -316,11 +324,107 @@ function pickPhase(tokenId, randomPhase) {
   return hashStringToUnit(tokenId) * 2 * Math.PI;
 }
 
+function normaliseMotionSyncParams(msg) {
+  const syncGroup = normaliseSyncGroup(msg?.syncGroup);
+
+  return {
+    syncGroup,
+    syncPhaseDeg: syncGroup ? normaliseSyncPhaseDeg(msg?.syncPhaseDeg) : 0
+  };
+}
+
+function buildMotionSyncMemberKey(tokenId) {
+  return `token:${tokenId}`;
+}
+
+function buildMotionSyncDetails(params) {
+  return {
+    effectName: EFFECT_NAME,
+    kind: "token",
+    freqHz: params.freqHz,
+    rollRad: params.rollRad,
+    bobPx: params.bobPx,
+    swayPx: params.swayPx,
+    noise: params.noise
+  };
+}
+
+function leaveMotionSyncState(runtime, state) {
+  if (!state) return;
+
+  if (state.syncGroup && state.syncMemberKey) {
+    leaveMotionSyncGroup(runtime, state.syncGroup, state.syncMemberKey);
+  }
+
+  state.syncGroup = null;
+  state.syncPhaseDeg = 0;
+}
+
+function configureMotionSyncState(runtime, state, syncGroup, syncPhaseDeg, params) {
+  const memberKey = state.syncMemberKey ?? buildMotionSyncMemberKey(state.tokenId);
+  const previousGroup = state.syncGroup ?? null;
+  const previousMemberKey = state.syncMemberKey ?? memberKey;
+
+  if (previousGroup && (previousGroup !== syncGroup || previousMemberKey !== memberKey)) {
+    leaveMotionSyncGroup(runtime, previousGroup, previousMemberKey);
+  }
+
+  state.syncMemberKey = memberKey;
+
+  if (!syncGroup) {
+    state.syncGroup = null;
+    state.syncPhaseDeg = 0;
+    return;
+  }
+
+  state.syncGroup = syncGroup;
+  state.syncPhaseDeg = syncPhaseDeg;
+
+  joinMotionSyncGroup(runtime, syncGroup, memberKey, buildMotionSyncDetails(params));
+}
+
+function removeInvalidSyncedState(runtime, fxMap, state) {
+  if (!state?.syncGroup) return false;
+
+  leaveMotionSyncState(runtime, state);
+  fxMap.delete(state.tokenId);
+
+  return true;
+}
+
+function getSyncedPhaseRad(runtime, state, params) {
+  let phaseRad = getMotionSyncPhaseRad(
+    runtime,
+    state.syncGroup,
+    params.freqHz,
+    state.syncPhaseDeg
+  );
+
+  if (Number.isFinite(phaseRad)) return phaseRad;
+
+  joinMotionSyncGroup(
+    runtime,
+    state.syncGroup,
+    state.syncMemberKey,
+    buildMotionSyncDetails(params)
+  );
+
+  phaseRad = getMotionSyncPhaseRad(
+    runtime,
+    state.syncGroup,
+    params.freqHz,
+    state.syncPhaseDeg
+  );
+
+  return Number.isFinite(phaseRad) ? phaseRad : null;
+}
+
 function onStart(runtime, msg) {
   const tokenIds = asTokenIds(msg.tokenIds);
   if (tokenIds.length === 0) return;
 
   const params = normaliseParams(msg);
+  const sync = normaliseMotionSyncParams(msg);
   const fxMap = getEffectMap(runtime);
 
   for (const tokenId of tokenIds) {
@@ -333,7 +437,14 @@ function onStart(runtime, msg) {
     const existing = fxMap.get(tokenId);
     if (existing) {
       existing.params = params;
-      existing.phase = pickPhase(tokenId, params.randomPhase);
+      configureMotionSyncState(
+        runtime,
+        existing,
+        sync.syncGroup,
+        sync.syncPhaseDeg,
+        params
+      );
+      existing.phase = existing.syncGroup ? 0 : pickPhase(tokenId, params.randomPhase);
       continue;
     }
 
@@ -350,13 +461,26 @@ function onStart(runtime, msg) {
     const base = snapshotBase(target);
     if (!base) continue;
 
-    fxMap.set(tokenId, {
+    const state = {
       tokenId,
       base,
       params,
-      phase: pickPhase(tokenId, params.randomPhase),
-      t: 0
-    });
+      phase: sync.syncGroup ? 0 : pickPhase(tokenId, params.randomPhase),
+      t: 0,
+      syncGroup: null,
+      syncPhaseDeg: 0,
+      syncMemberKey: buildMotionSyncMemberKey(tokenId)
+    };
+
+    configureMotionSyncState(
+      runtime,
+      state,
+      sync.syncGroup,
+      sync.syncPhaseDeg,
+      params
+    );
+
+    fxMap.set(tokenId, state);
   }
 
   if (fxMap.size > 0) ensureTicker(runtime, EFFECT_NAME, (deltaMS) => tick(runtime, deltaMS));
@@ -367,6 +491,7 @@ function onUpdate(runtime, msg) {
   if (tokenIds.length === 0) return;
 
   const params = normaliseParams(msg);
+  const sync = normaliseMotionSyncParams(msg);
   const fxMap = getEffectMap(runtime);
 
   for (const tokenId of tokenIds) {
@@ -374,7 +499,14 @@ function onUpdate(runtime, msg) {
     if (!state) continue;
 
     state.params = params;
-    state.phase = pickPhase(tokenId, params.randomPhase);
+    configureMotionSyncState(
+      runtime,
+      state,
+      sync.syncGroup,
+      sync.syncPhaseDeg,
+      params
+    );
+    state.phase = state.syncGroup ? 0 : pickPhase(tokenId, params.randomPhase);
   }
 }
 
@@ -396,6 +528,7 @@ function onStop(runtime, msg) {
       if (target) restoreBase(target, state.base);
     }
 
+    leaveMotionSyncState(runtime, state);
     fxMap.delete(tokenId);
 
     /**
@@ -435,29 +568,55 @@ function tick(runtime, deltaMS) {
 
   for (const state of fxMap.values()) {
     const token = canvas?.tokens?.get(state.tokenId);
-    if (!token) continue;
+    if (!token) {
+      removeInvalidSyncedState(runtime, fxMap, state);
+      continue;
+    }
 
     const target = getTokenOscTarget(token);
-    if (!target) continue;
+    if (!target) {
+      removeInvalidSyncedState(runtime, fxMap, state);
+      continue;
+    }
 
     state.t += dt;
 
     const { base, params, phase } = state;
 
-    const w = 2 * Math.PI * params.freqHz;
     const t = state.t;
 
-    const s = Math.sin(w * t + phase);
-    const c = Math.cos(w * t + phase);
+    let roll = 0;
+    let bob = 0;
+    let sway = 0;
+    let jx = 0;
+    let jy = 0;
+    let jr = 0;
 
-    const roll = params.rollRad * s;
-    const bob = params.bobPx * c;
-    const sway = params.swayPx * s;
+    if (state.syncGroup) {
+      const phaseRad = getSyncedPhaseRad(runtime, state, params);
+      if (phaseRad === null) continue;
 
-    const n = params.noise > 0 ? noise1(state.tokenId, t) * params.noise : 0;
-    const jx = n * JITTER_X;
-    const jy = n * JITTER_Y;
-    const jr = n * JITTER_ROT;
+      const waves = sampleMotionSyncWaves(phaseRad);
+      if (!waves) continue;
+
+      roll = params.rollRad * waves.rollWave;
+      bob = params.bobPx * waves.bobWave;
+      sway = params.swayPx * waves.swayWave;
+    } else {
+      const w = 2 * Math.PI * params.freqHz;
+
+      const s = Math.sin(w * t + phase);
+      const c = Math.cos(w * t + phase);
+
+      roll = params.rollRad * s;
+      bob = params.bobPx * c;
+      sway = params.swayPx * s;
+
+      const n = params.noise > 0 ? noise1(state.tokenId, t) * params.noise : 0;
+      jx = n * JITTER_X;
+      jy = n * JITTER_Y;
+      jr = n * JITTER_ROT;
+    }
 
     // Pin render-state to baseline while effect is active.
     target.visible = base.visible;
@@ -481,5 +640,9 @@ function tick(runtime, deltaMS) {
       target.scale.x = base.scaleX;
       target.scale.y = base.scaleY;
     }
+  }
+
+  if (fxMap.size === 0) {
+    cleanupTicker(runtime, EFFECT_NAME);
   }
 }

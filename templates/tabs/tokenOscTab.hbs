@@ -41,6 +41,30 @@
 
 <hr class="fxbus-divider"/>
 
+<div class="form-group">
+  <label class="fxbus-inline">
+    <input type="checkbox" name="tokenOscMotionSync"/>
+    Synchronise with other oscillation FX
+  </label>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Sync group</label>
+    <input type="text" name="tokenOscSyncGroup" value="motion-1" disabled/>
+  </div>
+  <div class="form-group">
+    <label>Phase offset (degrees)</label>
+    <input type="number" name="tokenOscSyncPhaseDeg" value="0" step="1" disabled/>
+  </div>
+</div>
+
+<p class="fxbus-muted">
+  Motion Sync: effects in the same sync group share timing. New members join the current motion; frequency updates refresh the group rhythm without resetting phase.
+</p>
+
+<hr class="fxbus-divider"/>
+
 <div class="fxbus-row">
   <button type="button" class="fxbus-do" data-do="oscApply">Apply</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-do="oscStop">Stop</button>
