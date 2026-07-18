@@ -115,18 +115,59 @@ jobs:
 
           rm -f "$ZIP_NAME"
 
-          zip -r "$ZIP_NAME" \
-            module.json \
-            README.md \
-            LICENSE \
-            assets \
-            scripts \
-            styles \
-            templates \
+          zip_args=(
+            "$ZIP_NAME"
+            module.json
+            README.md
+            LICENSE
+            scripts
+            styles
+            templates
+          )
+
+          if [ -d "assets" ]; then
+            zip_args+=(assets)
+          fi
+
+          zip -r "${zip_args[@]}" \
             -x "*.git*" \
-            -x "*.github*"
+            -x "*.github*" \
+            -x "tests/*" \
+            -x "tests/**" \
+            -x "package.json" \
+            -x "package-lock.json" \
+            -x "node_modules/*" \
+            -x "node_modules/**" \
+            -x "jest.config.*"
+
+          if [ ! -s "$ZIP_NAME" ]; then
+            echo "::error::${ZIP_NAME} was not created"
+            exit 1
+          fi
 
           unzip -l "$ZIP_NAME"
+
+      - name: Verify release zip contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ZIP_NAME="${{ steps.meta.outputs.zip_name }}"
+
+          forbidden_entries=(
+            "tests/"
+            "package.json"
+            "package-lock.json"
+            "node_modules/"
+            "jest.config."
+          )
+
+          for entry in "${forbidden_entries[@]}"; do
+            if unzip -l "$ZIP_NAME" | grep -F "$entry" > /dev/null; then
+              echo "::error::Release zip must not contain: $entry"
+              exit 1
+            fi
+          done
 
       - name: Create git tag
         shell: bash
