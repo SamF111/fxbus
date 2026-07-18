@@ -26,7 +26,7 @@
  * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
-import { num, selectedTokenIds } from "./shared/panelUtils.js";
+import { num, selectedTokenIds, setDisabled } from "./shared/panelUtils.js";
 
 const TAB_ID = "osc";
 
@@ -61,15 +61,49 @@ function getPanel(root) {
   return panel;
 }
 
-function getOscParams(panel) {
+function getMotionSyncParams(panel) {
+  const enabled =
+    panel.querySelector('input[name="tokenOscMotionSync"]')?.checked === true;
+
+  const syncGroup = enabled
+    ? String(panel.querySelector('input[name="tokenOscSyncGroup"]')?.value ?? "").trim()
+    : "";
+
+  const syncPhaseDeg = enabled
+    ? num(panel.querySelector('input[name="tokenOscSyncPhaseDeg"]')?.value, 0)
+    : 0;
+
+  return {
+    enabled,
+    syncGroup,
+    syncPhaseDeg
+  };
+}
+
+function getOscParams(panel, motionSyncEnabled = false) {
   return {
     rollDeg: num(panel.querySelector('input[name="oscRollDeg"]')?.value, 3),
     bobPx: num(panel.querySelector('input[name="oscBobPx"]')?.value, 2),
     swayPx: num(panel.querySelector('input[name="oscSwayPx"]')?.value, 1),
     freqHz: num(panel.querySelector('input[name="oscFreqHz"]')?.value, 0.7),
     noise: num(panel.querySelector('input[name="oscNoise"]')?.value, 0),
-    randomPhase: Boolean(panel.querySelector('input[name="oscRandomPhase"]')?.checked)
+    randomPhase: motionSyncEnabled
+      ? false
+      : Boolean(panel.querySelector('input[name="oscRandomPhase"]')?.checked)
   };
+}
+
+function syncMotionSyncControls(panel) {
+  const motionSync = panel.querySelector('input[name="tokenOscMotionSync"]');
+  const syncGroup = panel.querySelector('input[name="tokenOscSyncGroup"]');
+  const syncPhaseDeg = panel.querySelector('input[name="tokenOscSyncPhaseDeg"]');
+  const randomPhase = panel.querySelector('input[name="oscRandomPhase"]');
+
+  const enabled = motionSync?.checked === true;
+
+  setDisabled(syncGroup, !enabled);
+  setDisabled(syncPhaseDeg, !enabled);
+  setDisabled(randomPhase, enabled);
 }
 
 function getSelectedTokensForOscillation() {
@@ -85,17 +119,26 @@ function getSelectedTokensForOscillation() {
 function buildPayload(root, runtime) {
   const panel = getPanel(root);
   const tokenIds = getSelectedTokensForOscillation();
-  const params = getOscParams(panel);
+  const motionSync = getMotionSyncParams(panel);
+  const motionSyncActive = motionSync.enabled && motionSync.syncGroup.length > 0;
+  const params = getOscParams(panel, motionSyncActive);
 
   const action = shouldUpdate(runtime, tokenIds)
     ? "fx.tokenOsc.update"
     : "fx.tokenOsc.start";
 
-  return {
+  const payload = {
     action,
     tokenIds,
     ...params
   };
+
+  if (motionSyncActive) {
+    payload.syncGroup = motionSync.syncGroup;
+    payload.syncPhaseDeg = motionSync.syncPhaseDeg;
+  }
+
+  return payload;
 }
 
 export function tokenOscTabDef() {
@@ -120,6 +163,24 @@ export function tokenOscTabDef() {
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
+
+      syncMotionSyncControls(panel);
+
+      panel
+        .querySelector('input[name="tokenOscMotionSync"]')
+        ?.addEventListener(
+          "change",
+          () => syncMotionSyncControls(panel),
+          { signal }
+        );
+
+      panel
+        .querySelector('input[name="tokenOscMotionSync"]')
+        ?.addEventListener(
+          "input",
+          () => syncMotionSyncControls(panel),
+          { signal }
+        );
 
       const stop = () => {
         const tokenIds = selectedTokenIds();

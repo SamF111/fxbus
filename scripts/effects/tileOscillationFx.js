@@ -48,6 +48,14 @@
 import { ensureTicker, cleanupTicker } from "../ticker.js";
 import { clamp, degToRad } from "../utils.js";
 import { getTileFlowVisualObject } from "./tileFlowFx.js";
+import {
+  getMotionSyncPhaseRad,
+  joinMotionSyncGroup,
+  leaveMotionSyncGroup,
+  normaliseSyncGroup,
+  normaliseSyncPhaseDeg,
+  sampleMotionSyncWaves
+} from "./shared/motionSync.js";
 
 const EFFECT_NAME = "tileOscillation";
 
@@ -143,13 +151,17 @@ function normaliseTileIds(payload) {
 }
 
 function buildParams(payload) {
+  const syncGroup = normaliseSyncGroup(payload?.syncGroup);
+
   return {
     rotationRad: degToRad(clamp(Number(payload?.rotationDeg ?? 2), -30, 30)),
     swayPx: clamp(Number(payload?.swayPx ?? 4), -200, 200),
     bobPx: clamp(Number(payload?.bobPx ?? 0), -200, 200),
     scaleAmp: clamp(Number(payload?.scalePct ?? 0), -50, 50) / 100,
     freqHz: clamp(Number(payload?.freqHz ?? 0.35), 0.01, 10),
-    randomPhase: payload?.randomPhase !== false
+    randomPhase: payload?.randomPhase !== false,
+    syncGroup,
+    syncPhaseDeg: syncGroup ? normaliseSyncPhaseDeg(payload?.syncPhaseDeg) : 0
   };
 }
 
@@ -164,6 +176,78 @@ function phaseFromId(id) {
   const normalised = Math.abs(hash % 10000) / 10000;
 
   return normalised * Math.PI * 2;
+}
+
+function buildMotionSyncMemberKey(tileId) {
+  return `tile:${tileId}`;
+}
+
+function buildMotionSyncDetails(params) {
+  return {
+    effectName: EFFECT_NAME,
+    kind: "tile",
+    freqHz: params.freqHz,
+    rotationRad: params.rotationRad,
+    bobPx: params.bobPx,
+    swayPx: params.swayPx,
+    scaleAmp: params.scaleAmp
+  };
+}
+
+function leaveMotionSyncState(runtime, state) {
+  if (!state) return;
+
+  if (state.syncGroup && state.syncMemberKey) {
+    leaveMotionSyncGroup(runtime, state.syncGroup, state.syncMemberKey);
+  }
+
+  state.syncGroup = null;
+  state.syncPhaseDeg = 0;
+}
+
+function configureMotionSyncState(runtime, state, syncGroup, syncPhaseDeg, params) {
+  const memberKey = state.syncMemberKey ?? buildMotionSyncMemberKey(state.tileId);
+  const previousGroup = state.syncGroup ?? null;
+  const previousMemberKey = state.syncMemberKey ?? memberKey;
+
+  if (previousGroup && (previousGroup !== syncGroup || previousMemberKey !== memberKey)) {
+    leaveMotionSyncGroup(runtime, previousGroup, previousMemberKey);
+  }
+
+  state.syncMemberKey = memberKey;
+
+  if (!syncGroup) {
+    state.syncGroup = null;
+    state.syncPhaseDeg = 0;
+    return;
+  }
+
+  state.syncGroup = syncGroup;
+  state.syncPhaseDeg = syncPhaseDeg;
+
+  joinMotionSyncGroup(runtime, syncGroup, memberKey, buildMotionSyncDetails(params));
+}
+
+function getSyncedPhaseRad(runtime, state) {
+  let phaseRad = getMotionSyncPhaseRad(
+    runtime,
+    state.syncGroup,
+    state.freqHz,
+    state.syncPhaseDeg
+  );
+
+  if (Number.isFinite(phaseRad)) return phaseRad;
+
+  joinMotionSyncGroup(runtime, state.syncGroup, state.syncMemberKey, buildMotionSyncDetails(state));
+
+  phaseRad = getMotionSyncPhaseRad(
+    runtime,
+    state.syncGroup,
+    state.freqHz,
+    state.syncPhaseDeg
+  );
+
+  return Number.isFinite(phaseRad) ? phaseRad : null;
 }
 
 function snapshotTileTransform(obj) {
@@ -360,11 +444,40 @@ function rebaseTileOscillationState(runtime, state) {
   return true;
 }
 
-function buildAppliedOffset(state, now) {
+function buildAppliedOffset(runtime, state, now) {
   /**
    * Large comment:
    * Compute the current oscillation offset for the visible tile object.
    */
+  if (state.syncGroup) {
+    const phaseRad = getSyncedPhaseRad(runtime, state);
+    if (phaseRad === null) {
+      return {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scaleMul: 1
+      };
+    }
+
+    const waves = sampleMotionSyncWaves(phaseRad);
+    if (!waves) {
+      return {
+        x: 0,
+        y: 0,
+        rotation: 0,
+        scaleMul: 1
+      };
+    }
+
+    return {
+      x: state.swayPx * waves.swayWave,
+      y: state.bobPx * waves.bobWave,
+      rotation: state.rotationRad * waves.rollWave,
+      scaleMul: Math.max(0.01, 1 + (state.scaleAmp * waves.bobWave))
+    };
+  }
+
   const t = (now - state.startedAt) / 1000;
 
   const wave = Math.sin((Math.PI * 2 * state.freqHz * t) + state.phase);
@@ -452,6 +565,7 @@ function removeState(runtime, tileId, state, restore = true) {
     restoreTileTransform(state?.object, state?.original);
   }
 
+  leaveMotionSyncState(runtime, state);
   getTileMap(runtime).delete(tileId);
 }
 
@@ -472,7 +586,7 @@ function ensureTileTicker(runtime) {
         continue;
       }
 
-      const applied = buildAppliedOffset(state, now);
+      const applied = buildAppliedOffset(runtime, state, now);
       const appliedOk = applyTileTransform(state, applied);
 
       if (!appliedOk) {
@@ -499,13 +613,27 @@ function updateExistingState(runtime, tileId, state, params) {
    */
   ensureStateStillValid(runtime, tileId, state);
 
+  const wasSynced = Boolean(state.syncGroup);
+
   state.rotationRad = params.rotationRad;
   state.swayPx = params.swayPx;
   state.bobPx = params.bobPx;
   state.scaleAmp = params.scaleAmp;
   state.freqHz = params.freqHz;
 
-  if (!params.randomPhase) {
+  configureMotionSyncState(
+    runtime,
+    state,
+    params.syncGroup,
+    params.syncPhaseDeg,
+    params
+  );
+
+  if (state.syncGroup) {
+    state.phase = 0;
+  } else if (wasSynced && params.randomPhase) {
+    state.phase = phaseFromId(tileId);
+  } else if (!params.randomPhase) {
     state.phase = 0;
   }
 }
@@ -545,7 +673,7 @@ function startOrUpdate(runtime, payload) {
       continue;
     }
 
-    map.set(tileId, {
+    const state = {
       tileId,
       tile,
       object,
@@ -559,13 +687,26 @@ function startOrUpdate(runtime, payload) {
         scaleMul: 1
       },
       startedAt: performance.now(),
-      phase: params.randomPhase ? phaseFromId(tileId) : 0,
+      phase: params.syncGroup ? 0 : (params.randomPhase ? phaseFromId(tileId) : 0),
       rotationRad: params.rotationRad,
       swayPx: params.swayPx,
       bobPx: params.bobPx,
       scaleAmp: params.scaleAmp,
-      freqHz: params.freqHz
-    });
+      freqHz: params.freqHz,
+      syncGroup: null,
+      syncPhaseDeg: 0,
+      syncMemberKey: buildMotionSyncMemberKey(tileId)
+    };
+
+    configureMotionSyncState(
+      runtime,
+      state,
+      params.syncGroup,
+      params.syncPhaseDeg,
+      params
+    );
+
+    map.set(tileId, state);
   }
 
   ensureTileTicker(runtime);

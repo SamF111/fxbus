@@ -1,12 +1,20 @@
 <p class="fxbus-muted">
-  Rotate selected tiles indefinitely. Useful for planets, gears, fans, portals, magic circles, clockwork, radar sweeps, and solar-system props.
+  Rotate selected tiles continuously or oscillate them between angular limits. Useful for planets, gears, fans, portals, magic circles, clockwork, radar sweeps, and solar-system props.
 </p>
 
 <p class="fxbus-muted" data-tile-rotation-selection-summary>
   Select tiles with Foundry's native Tile tool, then apply rotation.
 </p>
 
-<div class="fxbus-grid-2">
+<div class="form-group">
+  <label>Rotation mode</label>
+  <select name="tileRotationMode">
+    <option value="continuous" selected>Continuous</option>
+    <option value="oscillating">Oscillating</option>
+  </select>
+</div>
+
+<div class="fxbus-grid-2" data-tile-rotation-mode-control="continuous">
   <div class="form-group">
     <label>Speed (deg/s)</label>
     <input
@@ -24,6 +32,54 @@
     <select name="tileRotationDirection">
       <option value="cw" selected>Clockwise</option>
       <option value="ccw">Counter-clockwise</option>
+    </select>
+  </div>
+</div>
+
+<div class="fxbus-grid-2" data-tile-rotation-mode-control="oscillating">
+  <div class="form-group">
+    <label>Minimum angle (deg)</label>
+    <input
+      type="number"
+      name="tileRotationOscillationMinDeg"
+      value="-15"
+      step="1"
+      min="-3600"
+      max="3600"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Maximum angle (deg)</label>
+    <input
+      type="number"
+      name="tileRotationOscillationMaxDeg"
+      value="15"
+      step="1"
+      min="-3600"
+      max="3600"
+    />
+  </div>
+</div>
+
+<div class="fxbus-grid-2" data-tile-rotation-mode-control="oscillating">
+  <div class="form-group">
+    <label>Cycles per second</label>
+    <input
+      type="number"
+      name="tileRotationOscillationCyclesPerSecond"
+      value="1"
+      step="0.1"
+      min="0.01"
+      max="60"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Curve</label>
+    <select name="tileRotationOscillationCurve">
+      <option value="smooth" selected>Smooth</option>
+      <option value="linear">Linear</option>
     </select>
   </div>
 </div>
@@ -52,6 +108,10 @@
   </div>
 </div>
 
+<p class="fxbus-muted">
+  Continuous mode uses speed and direction. Oscillating mode moves between the minimum and maximum angles. Start offset desynchronises repeated motion; Random offset gives each selected tile a stable different phase.
+</p>
+
 <div class="form-group">
   <label class="fxbus-inline">
     <input
@@ -62,6 +122,54 @@
     Restore original angle on stop
   </label>
 </div>
+
+<hr class="fxbus-divider"/>
+
+<div class="form-group">
+  <label>Anchor</label>
+  <select name="tileRotationAnchorMode">
+    <option value="centre" selected>Centre</option>
+    <option value="top-left">Top-left</option>
+    <option value="top">Top</option>
+    <option value="top-right">Top-right</option>
+    <option value="left">Left</option>
+    <option value="right">Right</option>
+    <option value="bottom-left">Bottom-left</option>
+    <option value="bottom">Bottom</option>
+    <option value="bottom-right">Bottom-right</option>
+    <option value="local">Custom local point</option>
+  </select>
+</div>
+
+<div class="fxbus-grid-2">
+  <div class="form-group">
+    <label>Anchor X</label>
+    <input
+      type="number"
+      name="tileRotationAnchorLocalX"
+      value="0.5"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+
+  <div class="form-group">
+    <label>Anchor Y</label>
+    <input
+      type="number"
+      name="tileRotationAnchorLocalY"
+      value="0.5"
+      step="0.01"
+      min="0"
+      max="1"
+    />
+  </div>
+</div>
+
+<p class="fxbus-muted">
+  Anchor X/Y are normalised tile-local coordinates. 0,0 is top-left; 0.5,0.5 is centre; 1,1 is bottom-right. Presets fill these values automatically; Custom local point enables manual editing. Old macros omit these fields and still rotate around the centre.
+</p>
 
 <hr class="fxbus-divider"/>
 

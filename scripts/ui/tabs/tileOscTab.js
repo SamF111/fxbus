@@ -38,7 +38,7 @@
  * - The panel aborts the signal before rewiring to prevent stacked listeners.
  */
 
-import { num, selectedTileIds } from "./shared/panelUtils.js";
+import { num, selectedTileIds, setDisabled } from "./shared/panelUtils.js";
 
 const TAB_ID = "tileOsc";
 const EFFECT_NAME = "tileOscillation";
@@ -192,7 +192,39 @@ function getTileOscPanel(root) {
   return panel;
 }
 
-function buildParams(panel) {
+function getMotionSyncParams(panel) {
+  const enabled =
+    panel.querySelector('input[name="tileOscMotionSync"]')?.checked === true;
+
+  const syncGroup = enabled
+    ? String(panel.querySelector('input[name="tileOscSyncGroup"]')?.value ?? "").trim()
+    : "";
+
+  const syncPhaseDeg = enabled
+    ? num(panel.querySelector('input[name="tileOscSyncPhaseDeg"]')?.value, 0)
+    : 0;
+
+  return {
+    enabled,
+    syncGroup,
+    syncPhaseDeg
+  };
+}
+
+function syncMotionSyncControls(panel) {
+  const motionSync = panel.querySelector('input[name="tileOscMotionSync"]');
+  const syncGroup = panel.querySelector('input[name="tileOscSyncGroup"]');
+  const syncPhaseDeg = panel.querySelector('input[name="tileOscSyncPhaseDeg"]');
+  const randomPhase = panel.querySelector('input[name="tileOscRandomPhase"]');
+
+  const enabled = motionSync?.checked === true;
+
+  setDisabled(syncGroup, !enabled);
+  setDisabled(syncPhaseDeg, !enabled);
+  setDisabled(randomPhase, enabled);
+}
+
+function buildParams(panel, motionSyncEnabled = false) {
   /**
    * Large comment:
    * Read tile oscillation parameters from tileOscTab.hbs.
@@ -211,9 +243,9 @@ function buildParams(panel) {
     swayPx: num(panel.querySelector('input[name="tileOscSwayPx"]')?.value, 3),
     scalePct: num(panel.querySelector('input[name="tileOscScalePct"]')?.value, 0),
     freqHz: num(panel.querySelector('input[name="tileOscFreqHz"]')?.value, 0.25),
-    randomPhase: Boolean(
-      panel.querySelector('input[name="tileOscRandomPhase"]')?.checked
-    )
+    randomPhase: motionSyncEnabled
+      ? false
+      : Boolean(panel.querySelector('input[name="tileOscRandomPhase"]')?.checked)
   };
 }
 
@@ -229,11 +261,21 @@ function buildPayload(root, runtime) {
     ? ACTION_UPDATE
     : ACTION_START;
 
-  return {
+  const motionSync = getMotionSyncParams(panel);
+  const motionSyncActive = motionSync.enabled && motionSync.syncGroup.length > 0;
+
+  const payload = {
     action,
     tileIds,
-    ...buildParams(panel)
+    ...buildParams(panel, motionSyncActive)
   };
+
+  if (motionSyncActive) {
+    payload.syncGroup = motionSync.syncGroup;
+    payload.syncPhaseDeg = motionSync.syncPhaseDeg;
+  }
+
+  return payload;
 }
 
 export function tileOscTabDef() {
@@ -258,6 +300,24 @@ export function tileOscTabDef() {
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
       );
       if (!panel) return;
+
+      syncMotionSyncControls(panel);
+
+      panel
+        .querySelector('input[name="tileOscMotionSync"]')
+        ?.addEventListener(
+          "change",
+          () => syncMotionSyncControls(panel),
+          { signal }
+        );
+
+      panel
+        .querySelector('input[name="tileOscMotionSync"]')
+        ?.addEventListener(
+          "input",
+          () => syncMotionSyncControls(panel),
+          { signal }
+        );
 
       const stop = () => {
         /**
