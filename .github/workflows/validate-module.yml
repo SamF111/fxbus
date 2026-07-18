@@ -13,21 +13,67 @@ permissions:
 
 jobs:
   validate:
-    name: Validate FX Bus module files
+    name: Validate FX Bus module files and tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
       - name: Show tool versions
         shell: bash
         run: |
           set -euo pipefail
           node --version
+          npm --version
           python3 --version
           jq --version
           zip --version | head -n 2
+
+      - name: Validate development files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_files=(
+            "package.json"
+            "package-lock.json"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "::error::Required development file missing: $file"
+              exit 1
+            fi
+          done
+
+          if [ ! -d "tests" ]; then
+            echo "::error::Jest tests folder missing: tests/"
+            exit 1
+          fi
+
+          if ! jq -e '.scripts.test | type == "string" and length > 0' package.json > /dev/null; then
+            echo "::error::package.json must define a non-empty scripts.test command"
+            exit 1
+          fi
+
+      - name: Install test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+
+      - name: Run Jest tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm test -- --ci --runInBand
 
       - name: Validate module.json syntax
         shell: bash
@@ -57,6 +103,7 @@ jobs:
 
           for field in "${required_fields[@]}"; do
             value="$(jq -r "$field // empty" module.json)"
+
             if [ -z "$value" ] || [ "$value" = "null" ]; then
               echo "::error::module.json is missing required field: $field"
               exit 1
@@ -136,6 +183,7 @@ jobs:
             "scripts"
             "styles"
             "templates"
+            "tests"
           )
 
           for dir in "${expected_dirs[@]}"; do
@@ -150,15 +198,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -t js_files < <(find scripts -type f -name "*.js" | sort)
+          mapfile -t js_files < <(
+            find scripts tests -type f -name "*.js" | sort
+          )
 
           if [ "${#js_files[@]}" -eq 0 ]; then
-            echo "::error::No JavaScript files found under scripts/"
+            echo "::error::No JavaScript files found under scripts/ or tests/"
             exit 1
           fi
 
           for file in "${js_files[@]}"; do
-            echo "Checking JS syntax: $file"
+            echo "Checking JavaScript syntax: $file"
             node --check "$file"
           done
 
@@ -173,7 +223,10 @@ jobs:
           import sys
 
           root = pathlib.Path(".").resolve()
-          scripts = root / "scripts"
+          source_directories = [
+              root / "scripts",
+              root / "tests",
+          ]
 
           import_pattern = re.compile(
               r"""(?:import\s+(?:[^'"]+\s+from\s+)?|export\s+[^'"]+\s+from\s+)["']([^"']+)["']"""
@@ -181,27 +234,31 @@ jobs:
 
           ok = True
 
-          for path in sorted(scripts.rglob("*.js")):
-              text = path.read_text(encoding="utf-8")
+          for source_directory in source_directories:
+              for path in sorted(source_directory.rglob("*.js")):
+                  text = path.read_text(encoding="utf-8")
 
-              for match in import_pattern.finditer(text):
-                  specifier = match.group(1)
+                  for match in import_pattern.finditer(text):
+                      specifier = match.group(1)
 
-                  if not specifier.startswith("."):
-                      continue
+                      if not specifier.startswith("."):
+                          continue
 
-                  target = (path.parent / specifier).resolve()
+                      target = (path.parent / specifier).resolve()
 
-                  candidates = [
-                      target,
-                      target.with_suffix(".js") if target.suffix == "" else target,
-                      target / "index.js",
-                  ]
+                      candidates = [
+                          target,
+                          target.with_suffix(".js") if target.suffix == "" else target,
+                          target / "index.js",
+                      ]
 
-                  if not any(candidate.exists() for candidate in candidates):
-                      rel_path = path.relative_to(root)
-                      print(f"::error file={rel_path}::Missing local import target: {specifier}")
-                      ok = False
+                      if not any(candidate.exists() for candidate in candidates):
+                          relative_path = path.relative_to(root)
+                          print(
+                              f"::error file={relative_path}::"
+                              f"Missing local import target: {specifier}"
+                          )
+                          ok = False
 
           if not ok:
               sys.exit(1)
@@ -214,7 +271,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          mapfile -t hbs_files < <(find templates -type f -name "*.hbs" | sort)
+          mapfile -t hbs_files < <(
+            find templates -type f -name "*.hbs" | sort
+          )
 
           if [ "${#hbs_files[@]}" -eq 0 ]; then
             echo "::error::No Handlebars templates found under templates/"
@@ -243,7 +302,9 @@ jobs:
           root = pathlib.Path(".").resolve()
           templates = root / "templates"
 
-          partial_pattern = re.compile(r"""\{\{>\s+["']([^"']+)["']\s*\}\}""")
+          partial_pattern = re.compile(
+              r"""\{\{>\s+["']([^"']+)["']\s*\}\}"""
+          )
 
           ok = True
 
@@ -259,8 +320,11 @@ jobs:
                       target = path.parent / partial
 
                   if not target.exists():
-                      rel_path = path.relative_to(root)
-                      print(f"::error file={rel_path}::Missing Handlebars partial: {partial}")
+                      relative_path = path.relative_to(root)
+                      print(
+                          f"::error file={relative_path}::"
+                          f"Missing Handlebars partial: {partial}"
+                      )
                       ok = False
 
           if not ok:
@@ -292,11 +356,41 @@ jobs:
 
           zip -r "${zip_args[@]}" \
             -x "*.git*" \
-            -x "*.github*"
+            -x "*.github*" \
+            -x "tests/*" \
+            -x "node_modules/*" \
+            -x "package.json" \
+            -x "package-lock.json"
 
-          if [ ! -s fxbus.zip ]; then
+          if [ ! -s "fxbus.zip" ]; then
             echo "::error::fxbus.zip was not created"
             exit 1
           fi
 
           unzip -l fxbus.zip
+
+      - name: Validate zip contents
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          required_archive_entries=(
+            "module.json"
+            "README.md"
+            "LICENSE"
+          )
+
+          for entry in "${required_archive_entries[@]}"; do
+            if ! unzip -Z1 fxbus.zip | grep -Fxq "$entry"; then
+              echo "::error::fxbus.zip is missing required file: $entry"
+              exit 1
+            fi
+          done
+
+          forbidden_pattern='^(\.github/|tests/|node_modules/)|^(package\.json|package-lock\.json)$'
+
+          if unzip -Z1 fxbus.zip | grep -Eq "$forbidden_pattern"; then
+            echo "::error::fxbus.zip contains development-only files"
+            unzip -Z1 fxbus.zip | grep -E "$forbidden_pattern"
+            exit 1
+          fi
