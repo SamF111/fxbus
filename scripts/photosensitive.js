@@ -14,6 +14,8 @@ const ACTION_GLOBAL_RESET = "fx.bus.reset";
 export const LOCAL_FX_DISABLED_SETTING = "disableLocalFx";
 export const RESPECT_REDUCED_MOTION_SETTING = "respectReducedMotion";
 export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+export const REDUCED_MOTION_SETTING_NAME = "Block FX when reduced motion is enabled";
+export const REDUCED_MOTION_SETTINGS_PATH = "Configure Settings → Module Settings → FX Bus";
 
 export const FX_SUPPRESSION_REASONS = Object.freeze({
   LOCAL_DISABLED: "local-disabled",
@@ -127,7 +129,9 @@ export function warnFxSuppressed(message, reason = getFxSuppressionReason(messag
   const text = localDisabled
     ? `FX Bus suppressed ${label} because effects are disabled on this client.`
     : reducedMotion
-      ? `FX Bus suppressed ${label} because your system requests reduced motion.`
+      ? `FX Bus blocked ${label} because this browser reports reduced motion. ` +
+        `To allow full effects on this client, turn off "${REDUCED_MOTION_SETTING_NAME}" ` +
+        `in ${REDUCED_MOTION_SETTINGS_PATH}.`
       : `FX Bus suppressed ${label} because Photosensitive Mode is enabled.`;
 
   console.warn("[FX Bus] suppressed effect", { action, reason });

@@ -41,7 +41,10 @@ packets:
 - Respect the device's `prefers-reduced-motion` request by default. FX Bus fully
   suppresses effects and shows a local warning while that preference is active;
   enabling the operating-system preference while Foundry is open immediately
-  clears effects on that client only.
+  clears effects on that client only. Users who want full effects can turn off
+  **Block FX when reduced motion is enabled** under **Configure Settings → Module
+  Settings → FX Bus**. This override is client-only and does not affect anyone
+  else.
 - Navigate the GM panel with the keyboard: category and effect tabs use proper
   tab semantics and arrow-key navigation, while the audience popup moves focus
   into its recipient choices and returns focus to its trigger when closed with

@@ -4,6 +4,8 @@ import { dispatchFx } from "./socket.js";
 import {
   LOCAL_FX_DISABLED_SETTING,
   REDUCED_MOTION_QUERY,
+  REDUCED_MOTION_SETTING_NAME,
+  REDUCED_MOTION_SETTINGS_PATH,
   RESPECT_REDUCED_MOTION_SETTING
 } from "./photosensitive.js";
 
@@ -44,8 +46,8 @@ export function registerLocalFxPreference(
   });
 
   settings.register(runtime.id, RESPECT_REDUCED_MOTION_SETTING, {
-    name: "Respect system reduced-motion preference",
-    hint: "Suppresses FX Bus effects completely when this device requests reduced motion. Stop and Reset actions remain available. No reduced or lite effects are substituted.",
+    name: REDUCED_MOTION_SETTING_NAME,
+    hint: "Blocks FX Bus effects completely when this browser or device requests reduced motion. Turn this off to allow full FX on this client. Stop and Reset actions remain available; no reduced or lite effects are substituted.",
     scope: "client",
     config: true,
     type: Boolean,
@@ -58,7 +60,9 @@ export function registerLocalFxPreference(
       if (enabled === true && reducedMotionRequested) {
         dispatchFx(runtime, { action: ACTION_GLOBAL_RESET });
         currentNotifications?.warn?.(
-          "FX Bus effects were cleared because your system requests reduced motion."
+          "FX Bus effects were cleared because this browser reports reduced motion. " +
+          `To allow full effects, turn off "${REDUCED_MOTION_SETTING_NAME}" in ` +
+          `${REDUCED_MOTION_SETTINGS_PATH}.`
         );
       } else if (enabled === true) {
         currentNotifications?.info?.(
@@ -106,7 +110,9 @@ export function registerReducedMotionListener(
     dispatchFx(runtime, { action: ACTION_GLOBAL_RESET });
     const currentNotifications = notifications ?? globalThis.ui?.notifications;
     currentNotifications?.warn?.(
-      "FX Bus effects were cleared because your system now requests reduced motion."
+      "FX Bus effects were cleared because this browser now reports reduced motion. " +
+      `To allow full effects, turn off "${REDUCED_MOTION_SETTING_NAME}" in ` +
+      `${REDUCED_MOTION_SETTINGS_PATH}.`
     );
   };
 

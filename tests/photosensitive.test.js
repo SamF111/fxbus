@@ -143,7 +143,9 @@ describe("FX Bus Photosensitive Mode", () => {
     );
 
     expect(ui.notifications.warn).toHaveBeenCalledWith(
-      "FX Bus suppressed Screen Roll because your system requests reduced motion."
+      "FX Bus blocked Screen Roll because this browser reports reduced motion. " +
+      "To allow full effects on this client, turn off \"Block FX when reduced motion is enabled\" " +
+      "in Configure Settings → Module Settings → FX Bus."
     );
   });
 });

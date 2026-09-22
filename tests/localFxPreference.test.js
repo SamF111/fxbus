@@ -40,6 +40,8 @@ describe("FX Bus local effect preference", () => {
       "fxbus",
       "respectReducedMotion",
       expect.objectContaining({
+        name: "Block FX when reduced motion is enabled",
+        hint: expect.stringContaining("Turn this off to allow full FX on this client."),
         scope: "client",
         config: true,
         type: Boolean,
@@ -127,7 +129,9 @@ describe("FX Bus local effect preference", () => {
 
     expect(reset).toHaveBeenCalledTimes(1);
     expect(notifications.warn).toHaveBeenCalledWith(
-      "FX Bus effects were cleared because your system requests reduced motion."
+      "FX Bus effects were cleared because this browser reports reduced motion. " +
+      "To allow full effects, turn off \"Block FX when reduced motion is enabled\" in " +
+      "Configure Settings → Module Settings → FX Bus."
     );
   });
 
@@ -162,7 +166,9 @@ describe("FX Bus local effect preference", () => {
 
     expect(reset).toHaveBeenCalledTimes(1);
     expect(notifications.warn).toHaveBeenCalledWith(
-      "FX Bus effects were cleared because your system now requests reduced motion."
+      "FX Bus effects were cleared because this browser now reports reduced motion. " +
+      "To allow full effects, turn off \"Block FX when reduced motion is enabled\" in " +
+      "Configure Settings → Module Settings → FX Bus."
     );
   });
 
