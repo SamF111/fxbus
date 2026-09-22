@@ -24,15 +24,8 @@ function makeGame() {
 }
 
 describe("GM panel audience targeting", () => {
-  test("lists the current GM first alongside online and offline world users", () => {
+  test("lists the current GM last after online and offline world users", () => {
     expect(getAudienceUsers(makeGame())).toEqual([
-      {
-        id: "gm",
-        name: "Gamemaster",
-        isGM: true,
-        isCurrentUser: true,
-        active: true
-      },
       { id: "alice", name: "Alice", isGM: false, isCurrentUser: false, active: true },
       { id: "bob", name: "Bob", isGM: false, isCurrentUser: false, active: true },
       { id: "cara", name: "Cara", isGM: false, isCurrentUser: false, active: true },
@@ -42,6 +35,13 @@ describe("GM panel audience targeting", () => {
         isGM: false,
         isCurrentUser: false,
         active: false
+      },
+      {
+        id: "gm",
+        name: "Gamemaster",
+        isGM: true,
+        isCurrentUser: true,
+        active: true
       }
     ]);
   });

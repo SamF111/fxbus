@@ -43,10 +43,10 @@ export function getAudienceUsers(gameRef = globalThis.game) {
       };
     });
 
-  // Keep the local user easy to find without disturbing the world's existing
-  // order for every other recipient.
+  // Keep the local user at the end so the remote recipients remain the primary
+  // choices, without disturbing the world's existing order for anyone else.
   return users.sort((left, right) =>
-    Number(right.isCurrentUser) - Number(left.isCurrentUser));
+    Number(left.isCurrentUser) - Number(right.isCurrentUser));
 }
 
 export function formatAudienceUserLabel(user) {
