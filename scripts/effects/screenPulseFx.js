@@ -24,7 +24,7 @@
  * - maxAlpha: number 0-1 (default 0.35)
  * - minAlpha: number 0-1 (default 0.0)
  * - shape: "sine" | "triangle" (default "sine")
- * - blendMode: "SCREEN" | "MULTIPLY" | "ADD" | "NORMAL" (default "SCREEN")
+ * - blendMode: "SCREEN" | "MULTIPLY" | "ADD" | "OVERLAY" | "NORMAL" (default "SCREEN")
  * - ease: "inOut" | "in" | "out" | "linear" (default "inOut")
  *
  * Critical:
@@ -108,6 +108,7 @@ function resolveBlendMode(name) {
   switch (name) {
     case "MULTIPLY": return m.MULTIPLY;
     case "ADD": return m.ADD;
+    case "OVERLAY": return m.OVERLAY ?? m.SCREEN ?? m.NORMAL;
     case "NORMAL": return m.NORMAL;
     case "SCREEN":
     default: return m.SCREEN ?? m.NORMAL;
@@ -202,8 +203,7 @@ function envelope(easeName, t01) {
   }
 
   const tri = 1 - Math.abs(2 * t - 1);
-  const half = tri <= 0.5 ? (tri / 0.5) : (1 - (tri - 0.5) / 0.5);
-  return 1 - (1 - half) * (1 - half);
+  return tri * tri * (3 - 2 * tri);
 }
 
 function wave(shape, phase01) {

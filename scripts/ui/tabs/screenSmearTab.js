@@ -89,7 +89,6 @@ export function screenSmearTabDef() {
         const sync = () => {
           const on = Boolean(until.checked);
           setDisabled(dur, on);
-          if (on) dur.value = "0";
         };
 
         until.addEventListener("change", sync, { signal });

@@ -2,30 +2,51 @@
 
 <form class="fxbus-panel" data-fxbus-root="1">
   <div class="fxbus-panel-layout">
-    <nav class="fxbus-category-rail" aria-label="FX Bus categories">
+    <nav
+      class="fxbus-category-rail"
+      role="tablist"
+      aria-label="FX Bus categories"
+      aria-orientation="vertical"
+    >
       {{#each groups}}
-        <a
+        <button
+          type="button"
+          role="tab"
           class="fxbus-category-tab {{#if this.active}}active{{/if}}"
           data-category="{{this.id}}"
+          id="fxbus-category-{{this.id}}"
+          aria-controls="fxbus-category-content"
           aria-selected="{{#if this.active}}true{{else}}false{{/if}}"
+          tabindex="{{#if this.active}}0{{else}}-1{{/if}}"
         >
           {{this.label}}
-        </a>
+        </button>
       {{/each}}
     </nav>
 
-    <div class="fxbus-main">
-      <nav class="tabs fxbus-subtabs" data-group="fxbus" aria-label="FX Bus effects">
+    <div class="fxbus-main" id="fxbus-category-content">
+      <nav
+        class="tabs fxbus-subtabs"
+        id="fxbus-subtabs"
+        role="tablist"
+        data-group="fxbus"
+        aria-label="FX Bus effects"
+      >
         {{#each activeTabs}}
-          <a
+          <button
+            type="button"
+            role="tab"
             class="item fxbus-subtab {{#if this.active}}active{{/if}}"
             data-group="fxbus"
             data-category="{{../activeCategory}}"
             data-tab="{{this.id}}"
+            id="fxbus-tab-{{../activeCategory}}-{{this.id}}"
+            aria-controls="fxbus-panel-{{../activeCategory}}-{{this.id}}"
             aria-selected="{{#if this.active}}true{{else}}false{{/if}}"
+            tabindex="{{#if this.active}}0{{else}}-1{{/if}}"
           >
             {{this.label}}
-          </a>
+          </button>
         {{/each}}
       </nav>
 

@@ -30,6 +30,11 @@ import {
   logPanelBuildError
 } from "./panelErrors.js";
 
+import {
+  addAudienceToPayload,
+  getPanelAudience
+} from "./panelAudience.js";
+
 function getActiveTabDef(app) {
   const categoryId = String(app?._activeCategory ?? "");
   const tabId = String(app?._activeTab ?? "");
@@ -124,6 +129,16 @@ export async function copyActiveTabApplyToClipboard(app, root, runtime) {
   const macroName = buildDefaultMacroName(tabDef, root, dateTag, timeTag);
 
   let macroSource = null;
+  let audience;
+
+  try {
+    audience = tabDef.id === "reset"
+      ? undefined
+      : getPanelAudience(app, globalThis.game, { requireConnected: false });
+  } catch (err) {
+    ui.notifications.warn(`FX Bus: ${err?.message ?? "Choose valid recipients and try again."}`);
+    return;
+  }
 
   if (typeof tabDef.buildMacroSource === "function") {
     try {
@@ -131,7 +146,8 @@ export async function copyActiveTabApplyToClipboard(app, root, runtime) {
         macroName,
         meta,
         dateTag,
-        timeTag
+        timeTag,
+        audience
       });
     } catch (err) {
       ui.notifications.warn(
@@ -201,7 +217,9 @@ export async function copyActiveTabApplyToClipboard(app, root, runtime) {
       return;
     }
 
-    macroSource = fxbusBuildMacroSource(macroName, payload, {
+    const audiencePayload = addAudienceToPayload(payload, audience);
+
+    macroSource = fxbusBuildMacroSource(macroName, audiencePayload, {
       requireGM: true,
       meta
     });

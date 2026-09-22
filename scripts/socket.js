@@ -26,8 +26,58 @@
  *   forging payload metadata.
  */
 
+import { matchesFxAudience, normalizeFxAudience } from "./audience.js";
+import {
+  getLocalTargetedFxSnapshot,
+  observeLocalTargetedFxMessage,
+  observeTargetedFxMessage,
+  reconcileTargetedFxUser
+} from "./targetedFxLedger.js";
+import {
+  acknowledgeTargetedFxMessage,
+  handleTargetedFxSyncMessage,
+  isTargetedFxSyncAction
+} from "./targetedFxSync.js";
+import { clearTargetedFxReminderIfInactive } from "./targetedFxReminders.js";
+import {
+  getFxSuppressionReason,
+  warnFxSuppressed
+} from "./photosensitive.js";
+
+const ACTION_GLOBAL_RESET = "fx.bus.reset";
+let outboundMessageSequence = 0;
+
+function nextOutboundMessageId() {
+  outboundMessageSequence += 1;
+  return `${Date.now().toString(36)}-${outboundMessageSequence.toString(36)}`;
+}
+
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && value.constructor === Object;
+}
+
+export function enrichFxBusPayload(payload) {
+  /**
+   * Attach trusted-source provenance to an outbound FX Bus payload.
+   *
+   * Always replace caller-supplied __fxbus data so normal emission paths cannot
+   * accidentally retain stale attribution from a copied or replayed packet.
+   */
+  if (!isPlainObject(payload)) {
+    throw new Error("[FX Bus] payload must be an object.");
+  }
+
+  return {
+    ...payload,
+    __fxbus: {
+      userId: game.userId ?? game.user?.id,
+      userName: game.user?.name,
+      isGM: game.user?.isGM === true,
+      role: getUserRole(game.user),
+      ts: Date.now(),
+      messageId: nextOutboundMessageId()
+    }
+  };
 }
 
 function getTrustedRoleValue() {
@@ -64,6 +114,16 @@ function getUserRole(user) {
 
   const n = Number(role);
   return Number.isFinite(n) ? n : null;
+}
+
+export function isTrustedFxBusUser(user) {
+  if (!user) return false;
+  if (user.isGM === true) return true;
+
+  const role = getUserRole(user);
+  if (role === null) return false;
+
+  return role >= getTrustedRoleValue();
 }
 
 function getSenderUser(message) {
@@ -103,13 +163,7 @@ function isTrustedFxBusSender(message) {
    */
   const sender = getSenderUser(message);
   if (!sender) return false;
-
-  if (sender.isGM === true) return true;
-
-  const role = getUserRole(sender);
-  if (role === null) return false;
-
-  return role >= getTrustedRoleValue();
+  return isTrustedFxBusUser(sender);
 }
 
 function getReadableSenderRole(user) {
@@ -197,17 +251,146 @@ function warnRejectedPayload(message) {
   );
 }
 
+function warnInvalidAudience(message, err) {
+  const action =
+    typeof message?.action === "string" && message.action.trim().length
+      ? message.action
+      : "unknown action";
+
+  console.warn("[FX Bus] rejected malformed audience", {
+    action,
+    audience: message?.audience,
+    error: err
+  });
+
+  globalThis.ui?.notifications?.warn?.(
+    `FX Bus rejected '${action}': audience.userIds must be an array of non-empty user IDs.`
+  );
+}
+
+function reconcileSuppressedGmState(runtime) {
+  // A GM can target their own client. Socket acknowledgements do not loop back
+  // to the emitter, so reconcile the reminder ledger directly with the state
+  // which is actually running locally.
+  if (globalThis.game?.user?.isGM !== true) return;
+
+  const userId = globalThis.game?.userId ?? globalThis.game?.user?.id;
+  if (!userId) return;
+
+  reconcileTargetedFxUser(
+    runtime,
+    userId,
+    getLocalTargetedFxSnapshot(runtime)
+  );
+  void clearTargetedFxReminderIfInactive(runtime);
+}
+
+export function validateFxMessageAudience(message) {
+  // Global reset is intentionally unaddressed. Even a copied reset macro that
+  // carries stale or malformed audience data must restore every client.
+  if (message?.action === ACTION_GLOBAL_RESET) return true;
+
+  try {
+    normalizeFxAudience(message?.audience);
+    return true;
+  } catch (err) {
+    warnInvalidAudience(message, err);
+    return false;
+  }
+}
+
+function warnUnavailableAudienceRecipients(message, unavailable) {
+  const action =
+    typeof message?.action === "string" && message.action.trim().length
+      ? message.action
+      : "unknown action";
+  const details = unavailable.map(({ id, name, reason }) =>
+    reason === "deleted" ? `${id} (deleted)` : `${name || id} (offline)`
+  );
+
+  console.warn("[FX Bus] targeted emit blocked for unavailable recipients", {
+    action,
+    unavailable
+  });
+
+  globalThis.ui?.notifications?.warn?.(
+    `FX Bus did not send '${action}': unavailable recipient${details.length === 1 ? "" : "s"}: ${details.join(", ")}.`
+  );
+}
+
+export function validateOutboundFxAudienceRecipients(message) {
+  /**
+   * Block targeted outbound packets when any selected world user cannot receive
+   * them. This runs only on the emitting client; receivers still match their own
+   * user id normally.
+   *
+   * Compatibility contract:
+   * - Global Reset always emits.
+   * - Omitted or empty audiences still mean Everyone.
+   * - Existing targeted macros become usable again as soon as all recipients
+   *   reconnect.
+   */
+  if (message?.action === ACTION_GLOBAL_RESET) return true;
+
+  const { userIds } = normalizeFxAudience(message?.audience);
+  if (userIds.length === 0) return true;
+
+  const unavailable = [];
+
+  for (const userId of userIds) {
+    const user = globalThis.game?.users?.get?.(userId) ?? null;
+
+    if (!user) {
+      unavailable.push({ id: userId, name: userId, reason: "deleted" });
+    } else if (user.active !== true) {
+      unavailable.push({
+        id: userId,
+        name: String(user.name ?? userId),
+        reason: "offline"
+      });
+    }
+  }
+
+  if (unavailable.length === 0) return true;
+
+  warnUnavailableAudienceRecipients(message, unavailable);
+  return false;
+}
+
+export function shouldApplyFxMessage(message) {
+  if (message?.action === ACTION_GLOBAL_RESET) return true;
+  if (!validateFxMessageAudience(message)) return false;
+
+  const currentUserId = globalThis.game?.userId ?? globalThis.game?.user?.id;
+  return matchesFxAudience(message?.audience, currentUserId);
+}
+
 export function dispatchFx(runtime, message) {
   try {
-    if (!isPlainObject(message)) return;
+    if (!isPlainObject(message)) return false;
 
     const action = message.action;
-    if (typeof action !== "string" || action.trim().length === 0) return;
+    if (typeof action !== "string" || action.trim().length === 0) return false;
+
+    if (!shouldApplyFxMessage(message)) return false;
+
+    const suppressionReason = getFxSuppressionReason(message);
+    if (suppressionReason) {
+      warnFxSuppressed(message, suppressionReason);
+      reconcileSuppressedGmState(runtime);
+      return false;
+    }
 
     const handler = runtime.handlers.get(action);
-    if (typeof handler !== "function") return;
+    if (typeof handler !== "function") return false;
 
     handler(message);
+    observeLocalTargetedFxMessage(
+      runtime,
+      message,
+      globalThis.game?.userId ?? globalThis.game?.user?.id
+    );
+    return true;
   } catch (err) {
     try {
       logMessageProvenance("dispatch error", message);
@@ -216,6 +399,7 @@ export function dispatchFx(runtime, message) {
     }
 
     console.error("[FX Bus] Local dispatch error:", err);
+    return false;
   }
 }
 
@@ -240,12 +424,24 @@ export function registerFxSocket(runtime) {
       // Receiver-side provenance log: who triggered this FX.
       logMessageProvenance("recv", message);
 
+      // Sync responses are valid from ordinary players and are handled by a
+      // narrow control-packet validator rather than the FX trust gate.
+      if (isTargetedFxSyncAction(message.action)) {
+        handleTargetedFxSyncMessage(runtime, message);
+        return;
+      }
+
       if (!isTrustedFxBusSender(message)) {
         warnRejectedPayload(message);
         return;
       }
 
-      dispatchFx(runtime, message);
+      if (!validateFxMessageAudience(message)) return;
+
+      observeTargetedFxMessage(runtime, message);
+      void clearTargetedFxReminderIfInactive(runtime);
+      const applied = dispatchFx(runtime, message);
+      acknowledgeTargetedFxMessage(runtime, message, applied ? "applied" : "failed");
     } catch (err) {
       try {
         logMessageProvenance("socket error", message);
@@ -268,6 +464,26 @@ export function emitFx(runtime, payload) {
   if (!runtime?.socketName) throw new Error("[FX Bus] emitFx: invalid runtime.");
   if (!isPlainObject(payload)) throw new Error("[FX Bus] emitFx: payload must be an object.");
 
-  dispatchFx(runtime, payload);
-  return game.socket.emit(runtime.socketName, payload);
+  // Current runtimes own logging, trust warnings, local dispatch, and socket
+  // emission. Delegate whenever possible so this compatibility helper cannot
+  // drift from the public runtime API again.
+  if (typeof runtime.emit === "function") {
+    return runtime.emit(payload);
+  }
+
+  if (!validateFxMessageAudience(payload)) return;
+  if (!validateOutboundFxAudienceRecipients(payload)) return;
+
+  // Older runtime shapes may not expose emit(). Preserve their helper contract
+  // while supplying the provenance now required by the receiver trust gate.
+  const enriched = enrichFxBusPayload(payload);
+
+  observeTargetedFxMessage(runtime, enriched);
+  void clearTargetedFxReminderIfInactive(runtime);
+
+  if (isTrustedFxBusUser(game.user)) {
+    dispatchFx(runtime, enriched);
+  }
+
+  return game.socket.emit(runtime.socketName, enriched);
 }

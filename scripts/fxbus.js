@@ -33,8 +33,25 @@
  * - Broadcast uses the enriched payload so receivers can log sender identity.
  */
 
-import { registerFxSocket } from "./socket.js";
+import {
+  dispatchFx,
+  enrichFxBusPayload,
+  registerFxSocket,
+  validateFxMessageAudience,
+  validateOutboundFxAudienceRecipients
+} from "./socket.js";
 import { registerBuiltInEffects } from "./effects/index.js";
+import { observeTargetedFxMessage } from "./targetedFxLedger.js";
+import {
+  clearTargetedFxReminderIfInactive,
+  DEFAULT_TARGETED_FX_REMINDER_SECONDS,
+  restartTargetedFxReminders
+} from "./targetedFxReminders.js";
+import {
+  registerTargetedFxSyncHooks,
+  startTargetedFxSync
+} from "./targetedFxSync.js";
+import { registerLocalFxPreference } from "./localFxPreference.js";
 import { registerFxBusSceneControls } from "./ui/controls.js";
 
 const RUNTIME_KEY = "fxbus";
@@ -126,23 +143,6 @@ function warnSkippedLocalApply(action) {
   );
 }
 
-function buildSenderMetadata() {
-  /**
-   * Large comment:
-   * Build provenance metadata for every locally emitted FX Bus payload.
-   *
-   * This stays under __fxbus so effect payload fields remain clean and existing
-   * macros do not need to know about sender bookkeeping.
-   */
-  return {
-    userId: game.userId,
-    userName: game.user?.name,
-    isGM: game.user?.isGM === true,
-    role: getCurrentUserRole(),
-    ts: Date.now()
-  };
-}
-
 function logEmit(runtime, action, enriched) {
   /**
    * Large comment:
@@ -181,7 +181,7 @@ function handleLocalPayload(runtime, action, enriched, t0) {
   }
 
   try {
-    handler(enriched);
+    if (!dispatchFx(runtime, enriched)) return;
 
     const dt = Math.round((performance.now() - t0) * 1000) / 1000;
 
@@ -223,6 +223,26 @@ function broadcastPayload(runtime, action, enriched) {
   }
 }
 
+export function registerCanvasTeardownCleanup(runtime) {
+  /**
+   * Restore all client-local FX before Foundry replaces the current canvas.
+   *
+   * This must remain a local dispatch. Broadcasting from canvasTearDown would
+   * let one user's scene navigation reset effects for every connected client.
+   * The runtime flag prevents duplicate hook registration if setup is invoked
+   * more than once during development or compatibility re-entry.
+   */
+  if (!runtime?.handlers || runtime.__canvasTeardownHookRegistered) return;
+
+  const cleanup = () => {
+    dispatchFx(runtime, { action: "fx.bus.reset" });
+  };
+
+  Hooks.on("canvasTearDown", cleanup);
+  runtime.__canvasTeardownHookRegistered = true;
+  runtime.__canvasTeardownCleanup = cleanup;
+}
+
 function getOrCreateRuntime() {
   /**
    * Large comment:
@@ -261,14 +281,18 @@ function getOrCreateRuntime() {
       const action = payload?.action;
       if (typeof action !== "string" || action.trim().length === 0) return;
 
+      if (!validateFxMessageAudience(payload)) return;
+      if (!validateOutboundFxAudienceRecipients(payload)) return;
+
       const t0 = performance.now();
 
-      const enriched = {
+      const enriched = enrichFxBusPayload({
         ...payload,
-        action,
-        __fxbus: buildSenderMetadata()
-      };
+        action
+      });
 
+      observeTargetedFxMessage(runtime, enriched);
+      void clearTargetedFxReminderIfInactive(runtime);
       logEmit(runtime, action, enriched);
 
       if (currentUserCanApplyFxLocally()) {
@@ -300,6 +324,23 @@ Hooks.once("init", () => {
     default: {}
   });
 
+  registerLocalFxPreference(runtime);
+
+  game.settings.register(runtime.id, "targetedFxReminderSeconds", {
+    name: "Targeted FX reminder interval",
+    hint: "Seconds between private GM notifications for active targeted effects. Set to 0 to disable reminders.",
+    scope: "client",
+    config: true,
+    type: Number,
+    default: DEFAULT_TARGETED_FX_REMINDER_SECONDS,
+    range: {
+      min: 0,
+      max: 300,
+      step: 5
+    },
+    onChange: (seconds) => restartTargetedFxReminders(runtime, seconds)
+  });
+
   registerFxBusSceneControls();
 
   console.log(`[FX Bus] Init | v${runtime.version}`);
@@ -314,6 +355,13 @@ Hooks.once("ready", () => {
 
   registerBuiltInEffects(runtime);
   registerFxSocket(runtime);
+  registerCanvasTeardownCleanup(runtime);
+  restartTargetedFxReminders(
+    runtime,
+    game.settings.get(runtime.id, "targetedFxReminderSeconds")
+  );
+  registerTargetedFxSyncHooks(runtime);
+  startTargetedFxSync(runtime);
 
   console.log(
     `[FX Bus] Ready | v${runtime.version} | handlers=${runtime.handlers.size} | socket=${runtime.socketName}`

@@ -130,19 +130,63 @@ export function setActivePanelState(root, categoryId, tabId) {
     const isActive = a.dataset.category === category;
     a.classList.toggle("active", isActive);
     a.setAttribute("aria-selected", isActive ? "true" : "false");
+    a.tabIndex = isActive ? 0 : -1;
   }
 
   for (const a of navItems) {
     const isActive = a.dataset.category === category && a.dataset.tab === tab;
     a.classList.toggle("active", isActive);
     a.setAttribute("aria-selected", isActive ? "true" : "false");
+    a.tabIndex = isActive ? 0 : -1;
   }
 
   for (const s of panels) {
     const isActive = s.dataset.category === category && s.dataset.tab === tab;
+    const panelId = `fxbus-panel-${s.dataset.category}-${s.dataset.tab}`;
+    const tabControlId = `fxbus-tab-${s.dataset.category}-${s.dataset.tab}`;
+
     s.classList.toggle("active", isActive);
+    s.id = panelId;
+    s.setAttribute("role", "tabpanel");
+    s.setAttribute("aria-labelledby", tabControlId);
+    s.hidden = !isActive;
     s.style.display = isActive ? "" : "none";
   }
+}
+
+export function getKeyboardNavigationTarget(items, current, key, orientation) {
+  const candidates = Array.from(items ?? []).filter((item) => !item?.disabled);
+  if (candidates.length === 0) return null;
+
+  const index = Math.max(0, candidates.indexOf(current));
+  const previousKey = orientation === "vertical" ? "ArrowUp" : "ArrowLeft";
+  const nextKey = orientation === "vertical" ? "ArrowDown" : "ArrowRight";
+
+  if (key === "Home") return candidates[0];
+  if (key === "End") return candidates[candidates.length - 1];
+  if (key === previousKey) {
+    return candidates[(index - 1 + candidates.length) % candidates.length];
+  }
+  if (key === nextKey) {
+    return candidates[(index + 1) % candidates.length];
+  }
+
+  return null;
+}
+
+function wireKeyboardNavigation(nav, selector, orientation, abortSignal) {
+  nav.addEventListener("keydown", (event) => {
+    const current = event.target?.closest?.(selector);
+    if (!current) return;
+
+    const items = nav.querySelectorAll(selector);
+    const next = getKeyboardNavigationTarget(items, current, event.key, orientation);
+    if (!next) return;
+
+    event.preventDefault();
+    next.focus();
+    next.click();
+  }, { signal: abortSignal });
 }
 
 export function renderSubTabs(root, app) {
@@ -167,12 +211,17 @@ export function renderSubTabs(root, app) {
   nav.innerHTML = "";
 
   for (const tab of tabs) {
-    const a = doc.createElement("a");
+    const a = doc.createElement("button");
+    a.type = "button";
+    a.setAttribute("role", "tab");
     a.className = "item fxbus-subtab";
     a.dataset.group = "fxbus";
     a.dataset.category = app._activeCategory;
     a.dataset.tab = tab.id;
+    a.id = `fxbus-tab-${app._activeCategory}-${tab.id}`;
+    a.setAttribute("aria-controls", `fxbus-panel-${app._activeCategory}-${tab.id}`);
     a.setAttribute("aria-selected", tab.id === app._activeTab ? "true" : "false");
+    a.tabIndex = tab.id === app._activeTab ? 0 : -1;
     a.textContent = tab.label;
 
     if (tab.id === app._activeTab) a.classList.add("active");
@@ -247,6 +296,13 @@ export function wireCategoryClicks(app, root, abortSignal) {
     },
     { capture: true, signal: abortSignal }
   );
+
+  wireKeyboardNavigation(
+    nav,
+    ".fxbus-category-tab[data-category]",
+    "vertical",
+    abortSignal
+  );
 }
 
 export function wireSubTabClicks(app, root, abortSignal) {
@@ -281,5 +337,12 @@ export function wireSubTabClicks(app, root, abortSignal) {
       });
     },
     { capture: true, signal: abortSignal }
+  );
+
+  wireKeyboardNavigation(
+    nav,
+    ".item[data-tab]",
+    "horizontal",
+    abortSignal
   );
 }

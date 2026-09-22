@@ -28,7 +28,8 @@
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) for the generic macro path.
  * - Provides buildMacroSource(root, runtime, options) for an authoritative toggle macro.
- * - The custom macro checks GM-local state and emits explicit start or stop.
+ * - The custom macro checks GM-owned state and emits explicit start or stop.
+ * - Targeted macros use the targeted-effect ledger; Everyone uses local render state.
  * - This avoids late-joining clients interpreting raw toggle in the opposite state.
  *
  * DOM lifecycle:
@@ -43,6 +44,7 @@ import {
   setDisabled,
   syncColourPair
 } from "./shared/panelUtils.js";
+import { PANEL_AUDIENCE } from "../panel/panelAudience.js";
 
 const TAB_ID = "laser";
 const EFFECT_NAME = "tokenLaser";
@@ -164,7 +166,24 @@ function buildStopPayload(root) {
   };
 }
 
-function buildAuthoritativeTogglePayload(root, runtime) {
+function isTargetedLaserActive(runtime, laserId, audience) {
+  const userIds = audience?.userIds ?? [];
+  if (userIds.length === 0) return false;
+
+  const userIdSet = new Set(userIds);
+  const resourceId = `laser:${laserId}`;
+
+  return Array.from(runtime?.targetedFxLedger?.values?.() ?? []).some((entry) =>
+    entry?.effectKey === EFFECT_NAME &&
+    userIdSet.has(entry?.userId) &&
+    (
+      entry?.resourceId === resourceId ||
+      entry?.selectors?.includes?.(resourceId)
+    )
+  );
+}
+
+export function buildAuthoritativeTogglePayload(root, runtime) {
   /**
    * Large comment:
    * Resolve Toggle on the GM client into an explicit start or stop payload.
@@ -175,8 +194,12 @@ function buildAuthoritativeTogglePayload(root, runtime) {
    */
   const panel = getPanel(root);
   const laserId = getLaserId(panel);
+  const audience = runtime?.[PANEL_AUDIENCE]?.();
   const store = runtime?.tokenFx?.get?.(EFFECT_NAME);
-  const isActive = Boolean(store?.has?.(laserId));
+  const localActive = Boolean(store?.has?.(laserId));
+  const isActive = audience?.userIds?.length
+    ? isTargetedLaserActive(runtime, laserId, audience)
+    : localActive;
 
   if (isActive) {
     return {
@@ -209,7 +232,9 @@ function buildMacroHeader(macroName, meta, laserId) {
     " *",
     " * Behaviour:",
     " * - Visual-only. Does not update Documents.",
-    " * - GM-local state decides whether to emit explicit start or stop.",
+    " * - GM-owned state decides whether to emit explicit start or stop.",
+    " * - Targeted audiences use the targeted-effect ledger.",
+    " * - Everyone uses the GM's local render state.",
     " * - Avoids raw toggle desync for late-joining clients.",
     " */"
   ].filter(Boolean);
@@ -217,7 +242,7 @@ function buildMacroHeader(macroName, meta, laserId) {
   return lines.join("\n");
 }
 
-function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
+export function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta, audience) {
   /**
    * Large comment:
    * Build a Token Tether macro that behaves as an authoritative toggle.
@@ -227,12 +252,14 @@ function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
   const safeStartPayload = {
     ...startPayload,
     action: "fx.tokenLaser.start",
-    laserId
+    laserId,
+    ...(audience?.userIds?.length ? { audience } : {})
   };
 
   const stopPayload = {
     action: "fx.tokenLaser.stop",
-    laserId
+    laserId,
+    ...(audience?.userIds?.length ? { audience } : {})
   };
 
   const header = buildMacroHeader(macroName, meta, laserId);
@@ -252,11 +279,24 @@ function buildAuthoritativeToggleMacroSource(startPayload, macroName, meta) {
   }
 
   const laserId = ${JSON.stringify(laserId)};
-  const store = runtime?.tokenFx?.get?.("${EFFECT_NAME}");
-  const isActive = Boolean(store?.has?.(laserId));
-
   const startPayload = ${startJson};
   const stopPayload = ${stopJson};
+  const targetUserIds = stopPayload.audience?.userIds ?? [];
+  const targetUserIdSet = new Set(targetUserIds);
+  const laserResourceId = "laser:" + laserId;
+  const targetedActive = targetUserIds.length > 0 && Array.from(
+    runtime?.targetedFxLedger?.values?.() ?? []
+  ).some((entry) =>
+    entry?.effectKey === "${EFFECT_NAME}" &&
+    targetUserIdSet.has(entry?.userId) &&
+    (
+      entry?.resourceId === laserResourceId ||
+      entry?.selectors?.includes?.(laserResourceId)
+    )
+  );
+  const localStore = runtime?.tokenFx?.get?.("${EFFECT_NAME}");
+  const localActive = Boolean(localStore?.has?.(laserId));
+  const isActive = targetUserIds.length > 0 ? targetedActive : localActive;
 
   runtime.emit(isActive ? stopPayload : startPayload);
 })();`;
@@ -386,7 +426,8 @@ export function tokenLaserTabDef() {
       return buildAuthoritativeToggleMacroSource(
         startPayload,
         options.macroName ?? "FX Bus - Token Tether",
-        options.meta ?? {}
+        options.meta ?? {},
+        options.audience
       );
     },
 

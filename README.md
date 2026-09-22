@@ -12,6 +12,46 @@ FX Bus is built for cinematic feedback, vehicle motion, alerts, screen effects, 
 
 Effects can be triggered from the GM control panel or copied out as macros. Panel actions and generated macros use the same payloads, so behaviour stays consistent whether effects are fired manually, chained into larger automation, combined with other modules, or reused in custom workflows.
 
+## What’s New in 0.8.0
+
+FX Bus 0.8 adds per-user audience targeting without breaking existing macros or
+packets:
+
+- Apply an effect to everyone, one user, or several selected users.
+- Use the arrow beside **Apply** to choose recipients. The button label updates to
+  show the current audience, for example **Apply to Bob**.
+- Leave the recipient list empty to preserve the original **Everyone** behaviour.
+- Build targeted macros even while their recipients are offline.
+- Reject a live targeted action or saved targeted macro with a clear GM warning
+  when a required recipient is unavailable.
+- Keep the GM informed through one private, periodically refreshed chat card that
+  lists active targeted effects, recipients, elapsed time, and remaining duration.
+- Remove the private reminder after the final targeted effect stops, after a
+  global reset, or when synchronisation confirms that no targeted effect remains.
+- Recover the GM’s reminder state after refresh using lightweight client
+  acknowledgements and state synchronisation.
+- Apply **Reset All FX** to everyone regardless of the currently selected audience.
+- Respect each client's Foundry **Photosensitive Mode** setting. FX Bus completely
+  suppresses effect start, update, toggle, and burst actions on that client and
+  displays a local warning naming the suppressed effect. Stop and Reset actions
+  remain available; no reduced or "lite" effect is substituted.
+- Let any user disable FX Bus effects on their own client. Enabling the client
+  setting immediately clears local effects, suppresses future effects with a
+  visible warning, and never changes the effects running for anyone else.
+- Respect the device's `prefers-reduced-motion` request by default. FX Bus fully
+  suppresses effects and shows a local warning while that preference is active;
+  enabling the operating-system preference while Foundry is open immediately
+  clears effects on that client only.
+- Navigate the GM panel with the keyboard: category and effect tabs use proper
+  tab semantics and arrow-key navigation, while the audience popup moves focus
+  into its recipient choices and returns focus to its trigger when closed with
+  Escape.
+
+0.8 also adds the Screen Pulse **Overlay** blend mode, updates Screen Blur for the
+current PIXI `BlurFilter` API while retaining a compatibility fallback, and expands
+the automated regression suite around socket trust, targeting, macros, reset, and
+reminder behaviour.
+
 
 
 
@@ -74,13 +114,60 @@ https://github.com/user-attachments/assets/5fc748bb-a636-4ce2-a69e-6184ab9bf4b2
 - **Deterministic start / stop**  
   Every effect has explicit start and stop actions. No hidden timers.
 
-- **GM broadcast model**  
-  The GM emits one message; all clients render the effect independently.
+- **GM audience model**
+  The GM can apply an effect to everyone or to selected connected users. Existing
+  packets and macros that omit an audience still apply to everyone. Offline world
+  users remain selectable for preparing targeted macros, while live panel actions
+  require every selected recipient to be connected. The picker updates user names
+  and online status while the panel remains open without resetting effect fields.
+  Targeted macros also stop with a GM warning if any saved recipient is offline or
+  has been deleted, rather than emitting a packet that nobody can receive. Clients
+  acknowledge successfully applied targeted effects and periodically answer a
+  lightweight state-sync request. The GM reconciles those replies with its private
+  reminder ledger, recovering after a GM refresh and removing stale state when a
+  recipient disconnects, reconnects, misses a packet, or fails to apply an effect.
+  Disconnects and deleted users are removed immediately; reconnects trigger an
+  immediate snapshot request instead of waiting for the periodic sync interval.
 
 - **Global kill switch**  
   A single reset action immediately restores all transforms.
 
 ---
+
+## Audience Targeting
+
+The control panel uses a split Apply control. Click the main button to apply the
+current effect to the displayed audience, or click its arrow to open the user
+picker.
+
+- **No users selected:** the effect applies to everyone. This is the legacy
+  behaviour and keeps existing macros compatible.
+- **One or more users selected:** only clients whose Foundry user IDs match the
+  packet audience apply the effect.
+- **Live panel actions:** every selected recipient must currently be connected.
+- **Macro authoring:** offline users may be selected so a GM can prepare macros
+  before a session. The generated macro validates its saved recipients when run.
+- **Reset:** always applies to everyone and does not inherit the selected audience.
+
+Audience targeting is an application filter, not a privacy or security boundary.
+FX Bus packets use the shared Foundry module socket; clients may receive a packet
+and then ignore it when their user ID is not in its audience.
+
+### Targeted-effect reminders
+
+While targeted effects are active, FX Bus keeps one private GM chat card showing:
+
+- The number of active targeted effect groups.
+- Each effect name and recipient.
+- How long the effect has been active.
+- Whether it runs until stopped or how much time remains.
+- The number of affected token or tile targets when relevant.
+
+The reminder interval is configurable in Foundry’s module settings and can be set
+to `0` to disable reminders. Each refresh replaces the previous FX Bus reminder,
+so the chat log contains at most one current card for that GM. Stop, Reset, user
+disconnect/deletion, and client-state reconciliation remove the card once the
+ledger becomes empty.
 
 
 
@@ -99,6 +186,9 @@ This runtime:
 * Dispatches FX messages by action string
 * Manages effect-local state and tickers
 * Applies and restores PIXI transforms safely
+* Filters targeted packets by stable Foundry user ID
+* Tracks targeted-effect acknowledgements and client state for the GM
+* Maintains one private GM reminder card for active targeted effects
 
 All effects are implemented as **handlers** registered against action names.
 
@@ -218,17 +308,20 @@ https://github.com/user-attachments/assets/2205d30a-74d5-43d5-8965-797fbf422b64
 
 ### Global Reset
 An emergency recovery mechanism that immediately stops all active FX and restores the scene to a clean state.  
-Intended as a guaranteed escape hatch during live play.
+Intended as a guaranteed escape hatch during live play. Reset always applies to
+everyone, regardless of the audience currently selected in the GM panel.
 
 
 ## GM Macros
 
-FX Bus includes GM macros for:
+Every effect tab in the GM panel can copy its current **Apply** configuration as a
+macro. The copied macro includes the selected audience when one is present; when
+no users are selected, it keeps the original apply-to-everyone behaviour. This
+means existing audience-less macros continue to work unchanged.
 
-* Token oscillation control
-* Screen shake control
-* Screen pulse control
-* Global reset
+Offline world users remain available while authoring a macro. When the macro is
+run, FX Bus checks that every saved recipient still exists and is connected before
+broadcasting the effect. Reset macros always apply globally.
 
 All macros use the unified emitter:
 

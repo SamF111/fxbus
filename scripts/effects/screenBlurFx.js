@@ -56,7 +56,10 @@ function getPixi() {
 
 function ensureBlurFilter() {
   const PIXI = getPixi();
-  if (!PIXI?.filters?.BlurFilter) throw new Error("[FX Bus] PIXI BlurFilter not available");
+  const BlurFilter = PIXI?.BlurFilter ?? PIXI?.filters?.BlurFilter;
+  if (typeof BlurFilter !== "function") {
+    throw new Error("[FX Bus] PIXI BlurFilter not available");
+  }
 
   const stage = globalThis.canvas?.stage;
   if (!stage) throw new Error("[FX Bus] canvas.stage not available");
@@ -65,7 +68,7 @@ function ensureBlurFilter() {
   let f = filters.find((x) => x?.__fxbusId === FX_ID);
 
   if (!f) {
-    f = new PIXI.filters.BlurFilter(0);
+    f = new BlurFilter(0);
     f.__fxbusId = FX_ID;
     stage.filters = [...filters, f];
   }

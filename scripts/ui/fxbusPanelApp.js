@@ -58,6 +58,11 @@ import {
   copyActiveTabApplyToClipboard
 } from "./panel/panelMacroCopy.js";
 
+import {
+  createAudienceRuntime,
+  wireAudienceControls
+} from "./panel/panelAudience.js";
+
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 function getFxBusModuleVersion() {
@@ -149,6 +154,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
       typeof options?.startTab === "string" ? options.startTab : null;
 
     this._tabAbort = null;
+    this._audienceUserIds = new Set();
   }
 
   setRequestedStart(categoryId, tabId) {
@@ -248,12 +254,13 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
     this._tabAbort = new AbortController();
     const signal = this._tabAbort.signal;
+    const audienceRuntime = createAudienceRuntime(runtime, this);
 
     applyStateToForm(root, this._state);
 
     for (const tabDef of this._tabs) {
       try {
-        tabDef.wire(root, runtime, signal);
+        tabDef.wire(root, audienceRuntime, signal);
       } catch (err) {
         console.error("[FX Bus] tab wire failed", {
           tab: tabDef?.id,
@@ -267,6 +274,8 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
         });
       }
     }
+
+    wireAudienceControls(this, root, signal);
 
     wireStatePersistence(root, signal);
     renderSubTabs(root, this);
@@ -303,6 +312,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     this._tabAbort = null;
+    this._audienceUserIds.clear();
 
     return super._onClose(_options);
   }

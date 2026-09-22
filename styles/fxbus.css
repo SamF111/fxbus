@@ -33,6 +33,104 @@
 }
 
 /* -------------------------------------------- */
+/* Targeted FX chat reminder                    */
+/* -------------------------------------------- */
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) {
+  border-left: 3px solid #9a7130;
+  box-shadow: inset 0 0 0 1px rgba(91, 70, 38, 0.14);
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-header {
+  align-items: flex-start;
+  padding-bottom: 0.38rem;
+  border-bottom: 1px solid rgba(154, 113, 48, 0.65);
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-sender {
+  gap: 0;
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-sender .avatar {
+  display: none !important;
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-sender .title {
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-sender .subtitle,
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-timestamp {
+  color: var(--color-text-subtle, var(--color-text-secondary));
+  font-size: var(--font-size-11, 0.6875rem);
+}
+
+.chat-message:has(> .message-content > .fxbus-targeted-reminder) .message-content {
+  padding-top: 0.45rem;
+}
+
+.fxbus-targeted-reminder {
+  color: var(--color-text-primary);
+}
+
+.fxbus-reminder-summary {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 0.35rem;
+}
+
+.fxbus-reminder-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0.08rem 0.42rem;
+  border: 1px solid rgba(54, 75, 66, 0.34);
+  border-radius: 0.3rem;
+  background: rgba(54, 75, 66, 0.14);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-10, 0.625rem);
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.fxbus-reminder-effects {
+  display: grid;
+}
+
+.fxbus-reminder-effect {
+  min-width: 0;
+  padding: 0.45rem 0;
+}
+
+.fxbus-reminder-effect:first-child {
+  padding-top: 0.15rem;
+}
+
+.fxbus-reminder-effect + .fxbus-reminder-effect {
+  border-top: 1px solid rgba(80, 70, 55, 0.28);
+}
+
+.fxbus-reminder-effect-name {
+  overflow-wrap: anywhere;
+  font-family: var(--font-serif, var(--font-primary));
+  font-size: var(--font-size-16, 1rem);
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.fxbus-reminder-effect-meta {
+  margin-top: 0.16rem;
+  overflow-wrap: anywhere;
+  color: var(--color-text-subtle, var(--color-text-secondary));
+  font-size: var(--font-size-12, 0.75rem);
+  line-height: 1.3;
+}
+
+/* -------------------------------------------- */
 /* GM control panel                             */
 /* -------------------------------------------- */
 
@@ -58,6 +156,9 @@
 
 .fxbus-panel-app .fxbus-category-tab {
   display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
   border: 1px solid transparent;
   background: transparent;
   color: var(--color-text-primary);
@@ -68,6 +169,8 @@
   user-select: none;
   text-decoration: none;
   line-height: 1.2;
+  font: inherit;
+  box-shadow: none;
 }
 
 .fxbus-panel-app .fxbus-category-tab:hover {
@@ -140,6 +243,8 @@
   line-height: 1.2;
   white-space: nowrap;
   margin-bottom: -1px;
+  font: inherit;
+  box-shadow: none;
 }
 
 .fxbus-panel-app .fxbus-subtab:hover {
@@ -213,6 +318,98 @@
 
 .fxbus-panel-app .fxbus-row button {
   min-width: 110px;
+}
+
+.fxbus-panel-app .fxbus-apply-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.fxbus-panel-app .fxbus-apply-split > [data-fxbus-audience-apply] {
+  min-width: 142px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.fxbus-panel-app .fxbus-apply-split > .fxbus-audience-toggle {
+  min-width: 28px;
+  width: 28px;
+  padding: 0 6px;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.fxbus-panel-app .fxbus-apply-split.fxbus-targeted > button {
+  border-color: var(--color-border-highlight);
+  box-shadow: inset 0 -2px 0 var(--color-border-highlight);
+}
+
+.fxbus-panel-app .fxbus-audience-menu {
+  position: absolute;
+  z-index: 100;
+  bottom: calc(100% + 4px);
+  left: 0;
+  min-width: 210px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 7px;
+  border: 1px solid var(--color-border-light-primary);
+  border-radius: 4px;
+  background: var(--color-bg, var(--color-cool-5, #f2f0e8));
+  color: var(--color-text-primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.fxbus-panel-app .fxbus-audience-menu[hidden] {
+  display: none;
+}
+
+.fxbus-panel-app .fxbus-audience-heading {
+  padding: 2px 5px 6px;
+  font-size: var(--font-size-12);
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.fxbus-panel-app .fxbus-audience-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 3px 5px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.fxbus-panel-app .fxbus-audience-option:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.fxbus-panel-app .fxbus-audience-option-offline {
+  color: var(--color-text-secondary);
+  font-style: italic;
+  opacity: 0.78;
+}
+
+.fxbus-panel-app .fxbus-audience-option input[type="checkbox"] {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.fxbus-panel-app .fxbus-audience-divider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--color-border-light-primary);
+}
+
+.fxbus-panel-app .fxbus-audience-empty {
+  padding: 5px;
+  font-size: var(--font-size-12);
+  color: var(--color-text-secondary);
+  font-style: italic;
 }
 
 .fxbus-panel-app .fxbus-smallbtn {
