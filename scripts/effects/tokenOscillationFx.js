@@ -43,6 +43,7 @@ const EFFECT_NAME = "tokenOscillation";
 const ACTION_START = "fx.tokenOsc.start";
 const ACTION_UPDATE = "fx.tokenOsc.update";
 const ACTION_STOP = "fx.tokenOsc.stop";
+const ACTION_STOP_ALL = "fx.tokenOsc.stopAll";
 
 const HOOK_WILL_START = "fxbusTokenOscillationWillStart";
 const HOOK_STOPPED = "fxbusTokenOscillationStopped";
@@ -80,6 +81,7 @@ export function registerTokenOscillationFx(runtime) {
   runtime.handlers.set(ACTION_START, (msg) => onStart(runtime, msg));
   runtime.handlers.set(ACTION_UPDATE, (msg) => onUpdate(runtime, msg));
   runtime.handlers.set(ACTION_STOP, (msg) => onStop(runtime, msg));
+  runtime.handlers.set(ACTION_STOP_ALL, () => onStopAll(runtime));
 }
 
 /**
@@ -544,6 +546,12 @@ function onStop(runtime, msg) {
   }
 
   if (fxMap.size === 0) cleanupTicker(runtime, EFFECT_NAME);
+}
+
+function onStopAll(runtime) {
+  const tokenIds = Array.from(getEffectMap(runtime).keys());
+  if (tokenIds.length === 0) return;
+  onStop(runtime, { tokenIds });
 }
 
 /**

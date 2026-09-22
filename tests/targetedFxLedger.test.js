@@ -187,6 +187,23 @@ describe("GM targeted FX ledger", () => {
     expect(rt.__targetedFxLedgerTimers.size).toBe(0);
   });
 
+  test.each([
+    ["fx.tokenOsc.start", "fx.tokenOsc.stopAll", { tokenIds: ["token-1"] }],
+    ["fx.tokenRecoil.burst", "fx.tokenRecoil.stopAll", { tokenIds: ["token-1"] }],
+    ["fx.tileOscillation.start", "fx.tileOscillation.stopAll", { tileIds: ["tile-1"] }]
+  ])("%s is cleared by explicit %s", (startAction, stopAllAction, resources) => {
+    const rt = runtime();
+
+    observeTargetedFxMessage(
+      rt,
+      targeted(startAction, ["player-a"], { ...resources, durationMs: 0 })
+    );
+    expect(getActiveTargetedFx(rt)).toHaveLength(1);
+
+    observeTargetedFxMessage(rt, targeted(stopAllAction, ["player-a"]));
+    expect(getActiveTargetedFx(rt)).toEqual([]);
+  });
+
   test("updates preserve the original start time and refresh ledger details", () => {
     const rt = runtime();
 

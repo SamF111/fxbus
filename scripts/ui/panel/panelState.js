@@ -42,6 +42,15 @@ export async function writeState(patch) {
 }
 
 export function applyStateToForm(root, state) {
+  const disclosures = state?.__disclosures;
+  if (disclosures && typeof disclosures === "object") {
+    for (const details of root.querySelectorAll("details[data-fxbus-disclosure]")) {
+      const key = String(details.dataset?.fxbusDisclosure ?? "");
+      if (!key || !Object.prototype.hasOwnProperty.call(disclosures, key)) continue;
+      details.open = disclosures[key] === true;
+    }
+  }
+
   for (const [name, value] of Object.entries(state ?? {})) {
     if (String(name).startsWith("__")) continue;
 
@@ -85,6 +94,17 @@ export function captureStateFromForm(root) {
     state[name] = el.value;
   }
 
+  const disclosures = {};
+  for (const details of root.querySelectorAll("details[data-fxbus-disclosure]")) {
+    const key = String(details.dataset?.fxbusDisclosure ?? "");
+    if (!key) continue;
+    disclosures[key] = details.open === true;
+  }
+
+  if (Object.keys(disclosures).length > 0) {
+    state.__disclosures = disclosures;
+  }
+
   return state;
 }
 
@@ -108,6 +128,10 @@ export function wireStatePersistence(root, signal) {
 
   root.addEventListener("input", scheduleSave, { capture: true, signal });
   root.addEventListener("change", scheduleSave, { capture: true, signal });
+
+  for (const details of root.querySelectorAll("details[data-fxbus-disclosure]")) {
+    details.addEventListener("toggle", scheduleSave, { signal });
+  }
 
   signal?.addEventListener?.("abort", clearTimer, { once: true });
 }

@@ -14,7 +14,7 @@
  *   - firstToRest: selected token[0] emits one beam or projectile towards each remaining selected token.
  * - Apply starts or updates continuous beams.
  * - Apply fires new projectile instances when projectile mode is selected.
- * - Stop Selected removes beams whose source token is currently selected.
+ * - Stop removes beams whose source token is currently selected.
  * - Stop All removes all Token Beam effects.
  *
  * Selection-layer metadata:
@@ -25,7 +25,7 @@
  * - No MutationObserver.
  * - No live token Hooks from this tab.
  * - No continuous canvas.tokens.controlled reads for tab text.
- * - Token IDs are read only when Apply, Stop Selected, or Copy Macro builds a payload.
+ * - Token IDs are read only when Apply, Stop, or Copy Macro builds a payload.
  *
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) for the generic macro path.

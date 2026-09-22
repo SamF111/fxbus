@@ -24,7 +24,8 @@ import {
 } from "./panelState.js";
 
 import {
-  activateCategorySelectionMode
+  activateCategorySelectionMode,
+  updateSelectionStatus
 } from "./panelSelection.js";
 
 export function normaliseRequestedPanelState(
@@ -152,6 +153,9 @@ export function setActivePanelState(root, categoryId, tabId) {
     s.hidden = !isActive;
     s.style.display = isActive ? "" : "none";
   }
+
+  const applyHelp = root.querySelector("[data-fxbus-apply-help]");
+  if (applyHelp) applyHelp.hidden = category === "reset";
 }
 
 export function getKeyboardNavigationTarget(items, current, key, orientation) {
@@ -249,6 +253,7 @@ async function commitPanelNavigation(app, root, categoryId, tabId, options = {})
   }
 
   setActivePanelState(root, app._activeCategory, app._activeTab);
+  updateSelectionStatus(root, app._activeCategory, globalThis.canvas, app._activeTab);
 
   await activateCategorySelectionMode(app._activeCategory);
 

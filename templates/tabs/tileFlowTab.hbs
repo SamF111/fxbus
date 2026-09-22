@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tileFlowTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Requires selected tiles. Scrolls the visible tile texture without changing the Tile document.
 </p>
@@ -147,9 +149,11 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
+</div>
+
+<div class="fxbus-row fxbus-actions">
   <button type="button" class="fxbus-do" data-action="tileFlowApply">Apply</button>
-  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="tileFlowStopSelected">Stop Selected</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="tileFlowStopSelected">Stop</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="tileFlowStopAll">Stop All</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>

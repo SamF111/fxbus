@@ -11,6 +11,7 @@
  * Actions:
  * - fx.tileOscillation.start
  * - fx.tileOscillation.stop
+ * - fx.tileOscillation.stopAll
  * - fx.tileOscillation.update
  *
  * Payload fields:
@@ -61,6 +62,7 @@ const EFFECT_NAME = "tileOscillation";
 
 const ACTION_START = "fx.tileOscillation.start";
 const ACTION_STOP = "fx.tileOscillation.stop";
+const ACTION_STOP_ALL = "fx.tileOscillation.stopAll";
 const ACTION_UPDATE = "fx.tileOscillation.update";
 
 function getTileMap(runtime) {
@@ -742,4 +744,5 @@ export function registerTileOscillationFx(runtime) {
   runtime.handlers.set(ACTION_START, (payload) => startOrUpdate(runtime, payload));
   runtime.handlers.set(ACTION_UPDATE, (payload) => startOrUpdate(runtime, payload));
   runtime.handlers.set(ACTION_STOP, (payload) => stop(runtime, payload));
+  runtime.handlers.set(ACTION_STOP_ALL, () => stop(runtime, {}));
 }

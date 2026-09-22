@@ -1,3 +1,5 @@
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Requires at least two selected tokens. Network mode links every selected token to every other selected token. Source mode links the first selected token to all other selected tokens.
 </p>
@@ -145,7 +147,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-tether-procedural">
   <summary style="cursor:pointer; font-weight:600;">
     Advanced procedural settings
   </summary>
@@ -273,7 +275,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-tether-motion">
   <summary style="cursor:pointer; font-weight:600;">
     Motion settings
   </summary>
@@ -357,7 +359,9 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
+</div>
+
+<div class="fxbus-row fxbus-actions">
   <button type="button" class="fxbus-do" data-do="laserApply">Apply</button>
   <button type="button" class="fxbus-do" data-do="laserToggle">Toggle</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-do="laserStop">Stop</button>

@@ -7,7 +7,7 @@
  * - Uses native Foundry tile selection.
  * - Emits the internal fx.tileRotation.* action namespace.
  * - Apply starts or updates indefinite visual-only tile rotation.
- * - Stop Selected removes rotation from currently selected tiles.
+ * - Stop removes rotation from currently selected tiles.
  * - Stop All removes all Tile Rotation effects.
  *
  * Selection-layer metadata:
@@ -18,7 +18,7 @@
  * - No MutationObserver.
  * - No live tile Hooks from this tab.
  * - No continuous canvas.tiles.controlled reads for tab text.
- * - Tile IDs are read only when Apply, Stop Selected, or Copy Macro builds a payload.
+ * - Tile IDs are read only when Apply, Stop, or Copy Macro builds a payload.
  *
  * Copy-to-macro support:
  * - Provides buildApplyPayload(root, runtime) for the generic macro path.
@@ -226,7 +226,7 @@ function updateSelectedTileSummary(panel) {
    * Large comment:
    * Keep the summary static.
    *
-   * The actual tile ids are read only when the user presses Apply, Stop Selected,
+   * The actual tile ids are read only when the user presses Apply, Stop,
    * or Copy Macro. This avoids passive tile-selection reads during tab rendering.
    */
   const el = panel.querySelector("[data-tile-rotation-selection-summary]");

@@ -10,7 +10,7 @@
  *
  * Actions:
  * - Apply: fx.tileFlicker.start
- * - Stop Selected: fx.tileFlicker.stop with selected tileIds
+ * - Stop: fx.tileFlicker.stop with selected tileIds
  * - Stop All: fx.tileFlicker.stop without tileIds
  *
  * Copy Macro:
@@ -67,7 +67,7 @@ function getSelectedTileIdsOrThrow() {
 function getSelectedTileIdsOrWarn() {
   /**
    * Large comment:
-   * Resolve selected tile ids for live Apply / Stop Selected button actions.
+   * Resolve selected tile ids for live Apply / Stop button actions.
    *
    * Button actions should warn and stop without throwing because these are normal
    * user interactions rather than macro-build validation paths.

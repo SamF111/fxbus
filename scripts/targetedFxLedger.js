@@ -37,7 +37,12 @@ const EFFECTS = [
     "fx.tokenOsc.start",
     "fx.tokenOsc.stop",
     0,
-    { updateActions: ["fx.tokenOsc.update"], resourceField: "tokenIds" }
+    {
+      updateActions: ["fx.tokenOsc.update"],
+      stopAllActions: ["fx.tokenOsc.stopAll"],
+      emptyStopMeansAll: false,
+      resourceField: "tokenIds"
+    }
   ),
   effect(
     "tokenRecoil",
@@ -45,7 +50,10 @@ const EFFECTS = [
     "fx.tokenRecoil.burst",
     "fx.tokenRecoil.stop",
     450,
-    { resourceField: "tokenIds" }
+    {
+      stopAllActions: ["fx.tokenRecoil.stopAll"],
+      resourceField: "tokenIds"
+    }
   ),
   effect("tokenDollyZoom", "Token Dolly Zoom", "fx.tokenDollyZoom.start", "fx.tokenDollyZoom.stop", 6500),
   effect(
@@ -80,7 +88,11 @@ const EFFECTS = [
     "fx.tileOscillation.start",
     "fx.tileOscillation.stop",
     0,
-    { updateActions: ["fx.tileOscillation.update"], resourceField: "tileIds" }
+    {
+      updateActions: ["fx.tileOscillation.update"],
+      stopAllActions: ["fx.tileOscillation.stopAll"],
+      resourceField: "tileIds"
+    }
   ),
   effect(
     "tileRotation",

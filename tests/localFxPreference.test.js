@@ -45,7 +45,7 @@ describe("FX Bus local effect preference", () => {
         scope: "client",
         config: true,
         type: Boolean,
-        default: true,
+        default: false,
         onChange: expect.any(Function)
       })
     );

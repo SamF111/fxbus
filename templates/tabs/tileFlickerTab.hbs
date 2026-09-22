@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tileFlickerTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Requires selected tiles. Apply starts if not running, otherwise updates.
 </p>
@@ -123,7 +125,9 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
+</div>
+
+<div class="fxbus-row fxbus-actions">
   <button
     type="button"
     class="fxbus-do"
@@ -134,7 +138,7 @@
     type="button"
     class="fxbus-do fxbus-smallbtn"
     data-action="tileFlickerStopSelected"
-  >Stop Selected</button>
+  >Stop</button>
 
   <button
     type="button"

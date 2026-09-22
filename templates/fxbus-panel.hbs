@@ -50,6 +50,19 @@
         {{/each}}
       </nav>
 
+      <div class="fxbus-panel-guidance">
+        <div
+          class="fxbus-selection-status"
+          data-fxbus-selection-status
+          role="status"
+          aria-live="polite"
+          hidden
+        ></div>
+        <p class="fxbus-apply-help" data-fxbus-apply-help>
+          Apply starts the effect or updates it when already running.
+        </p>
+      </div>
+
       <div class="fxbus-effect-body">
         <section
           class="tab fxbus-panel-section {{#if (and (eq activeCategory 'token') (eq activeTab 'osc'))}}active{{/if}}"

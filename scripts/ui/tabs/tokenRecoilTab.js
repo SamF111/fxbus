@@ -425,17 +425,26 @@ export function tokenRecoilTabDef() {
 
             const tokenIds = selectedTokenIds();
 
-            if (tokenIds.length > 0) {
-              runtime.emit({
-                action: "fx.tokenRecoil.stop",
-                tokenIds
-              });
+            if (tokenIds.length === 0) {
+              ui.notifications.warn("Select one or more tokens to stop Token Recoil.");
               return;
             }
 
             runtime.emit({
-              action: "fx.tokenRecoil.stop"
+              action: "fx.tokenRecoil.stop",
+              tokenIds
             });
+          },
+          { signal }
+        );
+
+      panel
+        .querySelector('button[type="button"][data-action="recoilStopAll"]')
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            runtime.emit({ action: "fx.tokenRecoil.stopAll" });
           },
           { signal }
         );

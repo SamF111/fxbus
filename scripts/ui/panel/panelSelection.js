@@ -150,6 +150,106 @@ function selectionLayerForCategory(categoryId) {
   return null;
 }
 
+function controlledCountForCategory(categoryId, canvasRef = globalThis.canvas) {
+  const collection = categoryId === "token"
+    ? canvasRef?.tokens?.controlled
+    : categoryId === "tile"
+      ? canvasRef?.tiles?.controlled
+      : null;
+
+  if (Array.isArray(collection)) return collection.length;
+  if (Number.isFinite(collection?.length)) return Math.max(0, collection.length);
+  if (Number.isFinite(collection?.size)) return Math.max(0, collection.size);
+  return 0;
+}
+
+function minimumSelectionCount(categoryId, tabId) {
+  if (categoryId === "token" && tabId === "laser") return 2;
+  if (categoryId === "token" || categoryId === "tile") return 1;
+  return 0;
+}
+
+export function formatSelectionStatus(categoryId, count, tabId = null) {
+  const total = Math.max(0, Number(count) || 0);
+
+  if (categoryId === "token") {
+    if (tabId === "laser" && total < 2) {
+      if (total === 0) return "No tokens selected — Token Tether needs 2";
+      return "1 token selected — Token Tether needs 2";
+    }
+
+    if (total === 0) return "No tokens selected";
+    return `${total} ${total === 1 ? "token" : "tokens"} selected`;
+  }
+
+  if (categoryId === "tile") {
+    if (total === 0) return "No tiles selected";
+    return `${total} ${total === 1 ? "tile" : "tiles"} selected`;
+  }
+
+  return "";
+}
+
+export function updateSelectionStatus(
+  root,
+  categoryId,
+  canvasRef = globalThis.canvas,
+  tabId = null
+) {
+  const status = root?.querySelector?.("[data-fxbus-selection-status]");
+  if (!status) return false;
+
+  const category = String(categoryId ?? "");
+  const usesSelection = category === "token" || category === "tile";
+
+  status.hidden = !usesSelection;
+  if (!usesSelection) {
+    status.textContent = "";
+    status.classList?.remove?.("fxbus-selection-status-empty");
+    return true;
+  }
+
+  const count = controlledCountForCategory(category, canvasRef);
+  const minimum = minimumSelectionCount(category, tabId);
+  status.textContent = formatSelectionStatus(category, count, tabId);
+  status.classList?.toggle?.("fxbus-selection-status-empty", count < minimum);
+  return true;
+}
+
+export function wireSelectionStatus(
+  app,
+  root,
+  signal,
+  hooks = globalThis.Hooks,
+  canvasRef = globalThis.canvas
+) {
+  const refresh = () => {
+    updateSelectionStatus(
+      root,
+      app?._activeCategory,
+      canvasRef,
+      app?._activeTab
+    );
+  };
+
+  refresh();
+
+  if (!hooks?.on || !hooks?.off) return refresh;
+
+  const registrations = [
+    ["controlToken", hooks.on("controlToken", refresh)],
+    ["controlTile", hooks.on("controlTile", refresh)]
+  ];
+
+  signal?.addEventListener?.("abort", () => {
+    for (const [eventName, hookId] of registrations) {
+      hooks.off(eventName, hookId);
+    }
+  }, { once: true });
+
+  return refresh;
+}
+
 export async function activateCategorySelectionMode(categoryId) {
   /**
    * Large comment:

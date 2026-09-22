@@ -43,7 +43,8 @@ import {
 } from "./panel/panelTemplates.js";
 
 import {
-  activateCategorySelectionMode
+  activateCategorySelectionMode,
+  wireSelectionStatus
 } from "./panel/panelSelection.js";
 
 import {
@@ -280,6 +281,7 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
     wireStatePersistence(root, signal);
     renderSubTabs(root, this);
     setActivePanelState(root, this._activeCategory, this._activeTab);
+    wireSelectionStatus(this, root, signal);
 
     /**
      * Large comment:

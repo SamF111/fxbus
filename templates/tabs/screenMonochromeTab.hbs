@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenMonochromeTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Applies a visual-only noir-style monochrome filter to all clients. Use duration 0 with Run until stopped for persistent scenes.
 </p>
@@ -93,9 +95,10 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
-  <button type="button" class="fxbus-do" data-action="monoStart">Start</button>
-  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="monoUpdate">Update</button>
+</div>
+
+<div class="fxbus-row fxbus-actions">
+  <button type="button" class="fxbus-do" data-action="monoApply">Apply</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="monoStop">Stop</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>

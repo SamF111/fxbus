@@ -196,6 +196,10 @@ export function tokenOscTabDef() {
         });
       };
 
+      const stopAll = () => {
+        runtime.emit({ action: "fx.tokenOsc.stopAll" });
+      };
+
       const apply = () => {
         try {
           runtime.emit(buildPayload(root, runtime));
@@ -212,6 +216,17 @@ export function tokenOscTabDef() {
           (event) => {
             event.preventDefault();
             stop();
+          },
+          { signal }
+        );
+
+      panel
+        .querySelector('button[type="button"][data-do="oscStopAll"]')
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stopAll();
           },
           { signal }
         );

@@ -91,8 +91,11 @@ describe("FX Bus Photosensitive Mode", () => {
 
   test.each([
     "fx.screenShake.stop",
+    "fx.tokenOsc.stopAll",
+    "fx.tokenRecoil.stopAll",
     "fx.tokenLaser.stopAll",
     "fx.tokenBeam.hardReset",
+    "fx.tileOscillation.stopAll",
     "fx.bus.reset"
   ])("always permits cleanup action %s", (action) => {
     globalThis.canvas = { photosensitiveMode: true };

@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tokenBeamTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Token Laser projects beams or projectile shots from selected tokens. Single uses token[0]. Apply to All uses every selected token. First to Rest makes token[0] aim at the rest.
 </p>
@@ -92,7 +94,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-beam-projectile">
   <summary style="cursor:pointer; font-weight:600;">
     Projectile settings
   </summary>
@@ -157,7 +159,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-beam-colour-width">
   <summary style="cursor:pointer; font-weight:600;">
     Colour and width
   </summary>
@@ -239,7 +241,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-beam-appearance">
   <summary style="cursor:pointer; font-weight:600;">
     Appearance
   </summary>
@@ -317,7 +319,7 @@
 
 <hr class="fxbus-divider"/>
 
-<details class="fxbus-advanced">
+<details class="fxbus-advanced" data-fxbus-disclosure="token-beam-instability-flow">
   <summary style="cursor:pointer; font-weight:600;">
     Instability and flow
   </summary>
@@ -433,9 +435,11 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
+</div>
+
+<div class="fxbus-row fxbus-actions">
   <button type="button" class="fxbus-do" data-do="tokenBeamApply">Apply</button>
-  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenBeamStopSelected">Stop Selected</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenBeamStopSelected">Stop</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-do="tokenBeamStopAll">Stop All</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>

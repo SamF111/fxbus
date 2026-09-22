@@ -18,6 +18,18 @@ function input(value, checked = false) {
   };
 }
 
+function button() {
+  return {
+    listener: null,
+    addEventListener(type, listener) {
+      if (type === "click") this.listener = listener;
+    },
+    click() {
+      this.listener?.({ preventDefault() {} });
+    }
+  };
+}
+
 function makeRoot(fields, tabId) {
   const panel = {
     querySelector(selector) {
@@ -204,6 +216,7 @@ describe("Tile Oscillation tab Motion Sync payloads", () => {
   afterEach(() => {
     delete globalThis.canvas;
     delete globalThis.fxbus;
+    delete globalThis.ui;
   });
 
   test("omits sync fields and preserves random phase for legacy payloads", () => {
@@ -294,5 +307,104 @@ describe("Tile Oscillation tab Motion Sync payloads", () => {
     expect(fields.tileOscSyncGroup.disabled).toBe(true);
     expect(fields.tileOscSyncPhaseDeg.disabled).toBe(true);
     expect(fields.tileOscRandomPhase.disabled).toBe(false);
+  });
+
+  test("Apply retains tile selection while Stop and Stop All remain distinct", () => {
+    const fields = tileFields();
+    const controls = {
+      tileOscApply: button(),
+      tileOscStop: button(),
+      tileOscStopAll: button()
+    };
+    let releases = 0;
+    const selectedTile = {
+      id: "tile-a",
+      release() {
+        releases += 1;
+      }
+    };
+    globalThis.canvas = {
+      tokens: { controlled: [] },
+      tiles: { controlled: [selectedTile] }
+    };
+
+    const panel = {
+      querySelector(selector) {
+        const name = selector.match(/input\[name="([^"]+)"\]/)?.[1];
+        if (name) return fields[name] ?? null;
+
+        const action = selector.match(/data-do="([^"]+)"/)?.[1];
+        return action ? controls[action] ?? null : null;
+      }
+    };
+    const root = {
+      querySelector(selector) {
+        return selector.includes('data-tab="tileOsc"') ? panel : null;
+      }
+    };
+    const emitted = [];
+
+    tileOscTabDef().wire(
+      root,
+      { tileFx: new Map(), emit: (payload) => emitted.push(payload) },
+      new AbortController().signal
+    );
+
+    controls.tileOscApply.click();
+    expect(emitted.at(-1)).toMatchObject({
+      action: "fx.tileOscillation.start",
+      tileIds: ["tile-a"]
+    });
+    expect(releases).toBe(0);
+    expect(canvas.tiles.controlled).toEqual([selectedTile]);
+
+    controls.tileOscStop.click();
+    expect(emitted.at(-1)).toEqual({
+      action: "fx.tileOscillation.stop",
+      tileIds: ["tile-a"]
+    });
+
+    controls.tileOscStopAll.click();
+    expect(emitted.at(-1)).toEqual({ action: "fx.tileOscillation.stopAll" });
+  });
+
+  test("Stop without a tile selection warns and sends nothing", () => {
+    const fields = tileFields();
+    const stopButton = button();
+    const warnings = [];
+    globalThis.canvas = {
+      tokens: { controlled: [] },
+      tiles: { controlled: [] }
+    };
+    globalThis.ui = {
+      notifications: { warn: (message) => warnings.push(message) }
+    };
+
+    const panel = {
+      querySelector(selector) {
+        const name = selector.match(/input\[name="([^"]+)"\]/)?.[1];
+        if (name) return fields[name] ?? null;
+        if (selector.includes('data-do="tileOscStop"')) return stopButton;
+        return null;
+      }
+    };
+    const root = {
+      querySelector(selector) {
+        return selector.includes('data-tab="tileOsc"') ? panel : null;
+      }
+    };
+    const emitted = [];
+
+    tileOscTabDef().wire(
+      root,
+      { tileFx: new Map(), emit: (payload) => emitted.push(payload) },
+      new AbortController().signal
+    );
+    stopButton.click();
+
+    expect(emitted).toEqual([]);
+    expect(warnings).toEqual([
+      "Select one or more tiles to stop Tile Oscillation."
+    ]);
   });
 });

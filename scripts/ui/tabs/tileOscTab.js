@@ -11,20 +11,13 @@
  * Behaviour:
  * - Requires native Tiles selection mode.
  * - Apply reads selected native Foundry tiles.
- * - Apply stores those tile IDs.
- * - Apply releases native tile selection before emitting start/update.
- * - Stop uses selected tiles if present.
- * - If no tiles are currently selected, Stop falls back to the last tile IDs used by Apply.
- * - If no tile IDs are available, Stop emits a stop-all payload for tile oscillation.
+ * - Apply retains native tile selection so Stop can address the same tiles.
+ * - Stop requires currently selected tiles and never falls back to another scope.
+ * - Stop All is a separate explicit action.
  *
  * Selection-layer metadata:
  * - selectionLayer: "tiles" tells the GM panel to activate Foundry's native
  *   Tiles selector when this tab is opened or clicked.
- *
- * Reason for releasing selection:
- * - Foundry refreshes selected Tile state during render ticks.
- * - Oscillating a selected tile's render object can trigger Tile._refreshState errors.
- * - FX Bus only needs stable tile IDs after Apply has been pressed.
  *
  * Runtime state:
  * - Expected shape:
@@ -46,74 +39,7 @@ const EFFECT_NAME = "tileOscillation";
 const ACTION_START = "fx.tileOscillation.start";
 const ACTION_UPDATE = "fx.tileOscillation.update";
 const ACTION_STOP = "fx.tileOscillation.stop";
-
-function getFxBusUiState(runtime) {
-  /**
-   * Large comment:
-   * Resolve a small client-side UI state bag on the FX Bus runtime.
-   *
-   * This does not store world data. It only remembers the last tile IDs used by
-   * the Tile Osc tab so Stop can still work after Apply releases native tile
-   * selection.
-   */
-  const rt = runtime ?? globalThis.fxbus;
-  if (!rt) return null;
-
-  if (!rt.ui) rt.ui = {};
-
-  if (!Array.isArray(rt.ui.lastTileOscTileIds)) {
-    rt.ui.lastTileOscTileIds = [];
-  }
-
-  return rt.ui;
-}
-
-function rememberTileIds(runtime, tileIds) {
-  /**
-   * Large comment:
-   * Store the last tile IDs used by this tab.
-   *
-   * This allows Stop to operate after Apply has deliberately released native
-   * tile selection.
-   */
-  const uiState = getFxBusUiState(runtime);
-  if (!uiState) return;
-
-  uiState.lastTileOscTileIds = Array.isArray(tileIds)
-    ? tileIds.filter((id) => typeof id === "string" && id.length > 0)
-    : [];
-}
-
-function getRememberedTileIds(runtime) {
-  const uiState = getFxBusUiState(runtime);
-  if (!uiState) return [];
-
-  return Array.isArray(uiState.lastTileOscTileIds)
-    ? uiState.lastTileOscTileIds.filter((id) => typeof id === "string" && id.length > 0)
-    : [];
-}
-
-function releaseNativeSelectedTiles() {
-  /**
-   * Large comment:
-   * Release native Foundry tile selection after FX Bus has read tile IDs.
-   *
-   * This prevents selected Tile refresh state from fighting the visual-only
-   * oscillation transform while the effect is running.
-   *
-   * This function belongs in the UI layer, not the effect layer. The effect layer
-   * should only consume tileIds and animate render objects.
-   */
-  const tiles = canvas?.tiles?.controlled ?? [];
-
-  for (const tile of tiles) {
-    try {
-      tile.release?.();
-    } catch {
-      // ignore
-    }
-  }
-}
+const ACTION_STOP_ALL = "fx.tileOscillation.stopAll";
 
 function getTileOscStateMap(runtime) {
   /**
@@ -320,45 +246,25 @@ export function tileOscTabDef() {
         );
 
       const stop = () => {
-        /**
-         * Large comment:
-         * Stop selected tiles if any are currently selected.
-         *
-         * If Apply already released native tile selection, fall back to the last
-         * tile IDs used by this tab. If that is also empty, emit a stop with no
-         * tileIds, which the effect handler treats as stop-all.
-         */
-        const selectedIds = selectedTileIds();
-        const rememberedIds = getRememberedTileIds(runtime);
-
-        const tileIds = selectedIds.length > 0
-          ? selectedIds
-          : rememberedIds;
-
-        if (tileIds.length > 0) {
-          runtime.emit({
-            action: ACTION_STOP,
-            tileIds
-          });
-        } else {
-          runtime.emit({
-            action: ACTION_STOP
-          });
+        const tileIds = selectedTileIds();
+        if (tileIds.length === 0) {
+          ui.notifications.warn("Select one or more tiles to stop Tile Oscillation.");
+          return;
         }
 
-        releaseNativeSelectedTiles();
+        runtime.emit({
+          action: ACTION_STOP,
+          tileIds
+        });
+      };
+
+      const stopAll = () => {
+        runtime.emit({ action: ACTION_STOP_ALL });
       };
 
       const apply = () => {
         try {
           const payload = buildPayload(root, runtime);
-
-          rememberTileIds(runtime, payload.tileIds);
-
-          // Critical: do not leave tiles natively selected while their render
-          // transforms are being animated every ticker.
-          releaseNativeSelectedTiles();
-
           runtime.emit(payload);
         } catch (err) {
           ui.notifications.warn("Select one or more tiles for Tile Oscillation.");
@@ -373,6 +279,17 @@ export function tileOscTabDef() {
           (event) => {
             event.preventDefault();
             stop();
+          },
+          { signal }
+        );
+
+      panel
+        .querySelector('button[type="button"][data-do="tileOscStopAll"]')
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stopAll();
           },
           { signal }
         );

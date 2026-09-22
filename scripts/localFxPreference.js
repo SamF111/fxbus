@@ -51,7 +51,7 @@ export function registerLocalFxPreference(
     scope: "client",
     config: true,
     type: Boolean,
-    default: true,
+    default: false,
     onChange: (enabled) => {
       const currentNotifications = notifications ?? globalThis.ui?.notifications;
       const reducedMotionRequested = windowRef

@@ -34,7 +34,7 @@ export function screenMonochromeTabDef() {
       const durationMs = until?.checked ? 0 : num(dur?.value, 0);
 
       return {
-        action: "fx.screenMonochrome.start",
+        action: "fx.screenMonochrome.update",
         durationMs,
         fadeInMs: num(panel.querySelector('input[name="monoFadeInMs"]')?.value, 300),
         fadeOutMs: num(panel.querySelector('input[name="monoFadeOutMs"]')?.value, 300),
@@ -66,34 +66,17 @@ export function screenMonochromeTabDef() {
         runtime.emit({ action: "fx.screenMonochrome.stop" });
       };
 
-      const start = () => {
+      const apply = () => {
         runtime.emit(this.buildApplyPayload(root, runtime));
       };
 
-      const update = () => {
-        const payload = this.buildApplyPayload(root, runtime);
-        payload.action = "fx.screenMonochrome.update";
-        runtime.emit(payload);
-      };
-
       panel
-        .querySelector('button[type="button"][data-action="monoStart"]')
+        .querySelector('button[type="button"][data-action="monoApply"]')
         ?.addEventListener(
           "click",
           (event) => {
             event.preventDefault();
-            start();
-          },
-          { signal }
-        );
-
-      panel
-        .querySelector('button[type="button"][data-action="monoUpdate"]')
-        ?.addEventListener(
-          "click",
-          (event) => {
-            event.preventDefault();
-            update();
+            apply();
           },
           { signal }
         );

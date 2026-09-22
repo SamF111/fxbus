@@ -33,4 +33,13 @@ describe("FX Bus panel accessibility markup", () => {
     expect(offlineRule).toContain("color: #5b554d");
     expect(offlineRule).not.toContain("opacity:");
   });
+
+  test("selection feedback is announced and narrow action bars use container sizing", () => {
+    expect(template).toContain('data-fxbus-selection-status');
+    expect(template).toContain('role="status"');
+    expect(template).toContain('aria-live="polite"');
+    expect(template).toContain('data-fxbus-apply-help');
+    expect(stylesheet).toContain('container-name: fxbus-main');
+    expect(stylesheet).toContain('@container fxbus-main (max-width: 480px)');
+  });
 });

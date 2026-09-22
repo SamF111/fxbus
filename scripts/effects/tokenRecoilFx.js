@@ -23,6 +23,7 @@
  * Actions:
  * - fx.tokenRecoil.burst
  * - fx.tokenRecoil.stop
+ * - fx.tokenRecoil.stopAll
  *
  * Payload:
  * {
@@ -50,6 +51,7 @@ const EFFECT_NAME = "tokenRecoil";
 
 const ACTION_BURST = "fx.tokenRecoil.burst";
 const ACTION_STOP = "fx.tokenRecoil.stop";
+const ACTION_STOP_ALL = "fx.tokenRecoil.stopAll";
 
 /**
  * Register handlers for token recoil effect.
@@ -61,6 +63,7 @@ export function registerTokenRecoilFx(runtime) {
 
   runtime.handlers.set(ACTION_BURST, (msg) => onBurst(runtime, msg));
   runtime.handlers.set(ACTION_STOP, (msg) => onStop(runtime, msg));
+  runtime.handlers.set(ACTION_STOP_ALL, () => stopAll(runtime));
 }
 
 /**

@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\tokenRecoilTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Visual-only token recoil. Pick an origin for blasts, or use the first selected token for caster-origin shockwaves.
 </p>
@@ -173,8 +175,11 @@
 
 <hr class="fxbus-divider" />
 
-<div class="fxbus-row">
-  <button type="button" class="fxbus-do" data-action="recoilStart">Start</button>
+</div>
+
+<div class="fxbus-row fxbus-actions">
+  <button type="button" class="fxbus-do" data-action="recoilStart">Apply</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="recoilStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-action="recoilStopAll">Stop All</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>
