@@ -4,6 +4,7 @@ import {
   closeAudienceMenus,
   createAudienceRuntime,
   formatApplyAudienceLabel,
+  formatAudienceUserLabel,
   getAudienceUsers,
   getPanelAudience,
   wireAudienceRosterRefresh
@@ -23,13 +24,50 @@ function makeGame() {
 }
 
 describe("GM panel audience targeting", () => {
-  test("lists online and offline world users other than the current GM", () => {
+  test("lists the current GM first alongside online and offline world users", () => {
     expect(getAudienceUsers(makeGame())).toEqual([
-      { id: "alice", name: "Alice", isGM: false, active: true },
-      { id: "bob", name: "Bob", isGM: false, active: true },
-      { id: "cara", name: "Cara", isGM: false, active: true },
-      { id: "offline", name: "Offline", isGM: false, active: false }
+      {
+        id: "gm",
+        name: "Gamemaster",
+        isGM: true,
+        isCurrentUser: true,
+        active: true
+      },
+      { id: "alice", name: "Alice", isGM: false, isCurrentUser: false, active: true },
+      { id: "bob", name: "Bob", isGM: false, isCurrentUser: false, active: true },
+      { id: "cara", name: "Cara", isGM: false, isCurrentUser: false, active: true },
+      {
+        id: "offline",
+        name: "Offline",
+        isGM: false,
+        isCurrentUser: false,
+        active: false
+      }
     ]);
+  });
+
+  test("labels the local user clearly without hiding other GM or offline status", () => {
+    expect(formatAudienceUserLabel({
+      id: "gm",
+      name: "Gamemaster",
+      isGM: true,
+      isCurrentUser: true,
+      active: true
+    })).toBe("Gamemaster (you)");
+    expect(formatAudienceUserLabel({
+      id: "assistant",
+      name: "Assistant GM",
+      isGM: true,
+      isCurrentUser: false,
+      active: true
+    })).toBe("Assistant GM [GM]");
+    expect(formatAudienceUserLabel({
+      id: "offline",
+      name: "Offline",
+      isGM: false,
+      isCurrentUser: false,
+      active: false
+    })).toBe("Offline (offline)");
   });
 
   test("uses concise Apply labels for everyone, one, two, and many users", () => {
@@ -81,6 +119,19 @@ describe("GM panel audience targeting", () => {
       audience: { userIds: ["alice", "bob"] }
     });
     expect(scoped.tokenFx).toBe(runtime.tokenFx);
+  });
+
+  test("allows the current GM to target only their own client", () => {
+    const emit = jest.fn();
+    const app = { _audienceUserIds: new Set(["gm"]) };
+    const scoped = createAudienceRuntime({ emit }, app, { game: makeGame() });
+
+    scoped.emit({ action: "fx.screenNoise.start" });
+
+    expect(emit).toHaveBeenCalledWith({
+      action: "fx.screenNoise.start",
+      audience: { userIds: ["gm"] }
+    });
   });
 
   test("blocks a selected user who disconnected instead of broadcasting", () => {

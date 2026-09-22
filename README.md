@@ -17,7 +17,7 @@ Effects can be triggered from the GM control panel or copied out as macros. Pane
 FX Bus 0.8 adds per-user audience targeting without breaking existing macros or
 packets:
 
-- Apply an effect to everyone, one user, or several selected users.
+- Apply an effect to everyone, yourself, one other user, or several selected users.
 - Use the arrow beside **Apply** to choose recipients. The button label updates to
   show the current audience, for example **Apply to Bob**.
 - Leave the recipient list empty to preserve the original **Everyone** behaviour.

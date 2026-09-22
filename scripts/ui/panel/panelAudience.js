@@ -27,17 +27,38 @@ function userValues(gameRef = globalThis.game) {
 export function getAudienceUsers(gameRef = globalThis.game) {
   const currentUserId = String(gameRef?.user?.id ?? "");
 
-  return userValues(gameRef)
+  const users = userValues(gameRef)
     .filter((user) => {
       const id = String(user?.id ?? "").trim();
-      return id.length > 0 && id !== currentUserId;
+      return id.length > 0;
     })
-    .map((user) => ({
-      id: String(user.id),
-      name: String(user.name ?? user.id),
-      isGM: Boolean(user.isGM),
-      active: user.active === true
-    }));
+    .map((user) => {
+      const id = String(user.id);
+      return {
+        id,
+        name: String(user.name ?? user.id),
+        isGM: Boolean(user.isGM),
+        isCurrentUser: id === currentUserId,
+        active: user.active === true
+      };
+    });
+
+  // Keep the local user easy to find without disturbing the world's existing
+  // order for every other recipient.
+  return users.sort((left, right) =>
+    Number(right.isCurrentUser) - Number(left.isCurrentUser));
+}
+
+export function formatAudienceUserLabel(user) {
+  const name = String(user?.name ?? user?.id ?? "Unknown user");
+  const identity = user?.isCurrentUser
+    ? " (you)"
+    : user?.isGM
+      ? " [GM]"
+      : "";
+  const availability = user?.active === true ? "" : " (offline)";
+
+  return `${name}${identity}${availability}`;
 }
 
 function selectedIds(app) {
@@ -248,9 +269,7 @@ function populateAudienceUsers(app, menu, documentRef, users, refresh) {
     });
     label.append(
       checkbox,
-      documentRef.createTextNode(
-        `${user.name}${user.isGM ? " [GM]" : ""}${user.active ? "" : " (offline)"}`
-      )
+      documentRef.createTextNode(formatAudienceUserLabel(user))
     );
     container.append(label);
   }
@@ -258,7 +277,7 @@ function populateAudienceUsers(app, menu, documentRef, users, refresh) {
   if (users.length === 0) {
     const empty = documentRef.createElement("div");
     empty.className = "fxbus-audience-empty";
-    empty.textContent = "No other world users";
+    empty.textContent = "No world users";
     container.append(empty);
   }
 }
