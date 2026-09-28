@@ -420,6 +420,10 @@ export function tokenLaserTabDef() {
       return buildPayload(root, "fx.tokenLaser.start");
     },
 
+    buildStopPayload(root, _runtime) {
+      return buildStopPayload(root);
+    },
+
     buildMacroSource(root, _runtime, options = {}) {
       const startPayload = buildPayload(root, "fx.tokenLaser.start");
 

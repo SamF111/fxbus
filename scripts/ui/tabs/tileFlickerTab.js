@@ -145,6 +145,13 @@ export function tileFlickerTabDef() {
       return buildPayload(panel, tileIds);
     },
 
+    buildStopPayload(_root, _runtime) {
+      return {
+        action: "fx.tileFlicker.stop",
+        tileIds: getSelectedTileIdsOrThrow()
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`

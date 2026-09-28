@@ -43,7 +43,13 @@ function panelGame() {
     users: new Map([
       ["gm", { id: "gm", active: true, isGM: true }],
       ["player-a", { id: "player-a", active: true, isGM: false }],
-      ["player-b", { id: "player-b", active: true, isGM: false }]
+      ["player-b", { id: "player-b", active: true, isGM: false }],
+      ["offline-player", {
+        id: "offline-player",
+        name: "Offline Player",
+        active: false,
+        isGM: false
+      }]
     ])
   };
 }
@@ -221,5 +227,36 @@ describe("Token Tether panel audience toggle", () => {
       action: "fx.tokenLaser.stop",
       laserId: "party-link"
     });
+  });
+
+  test("ignores offline ledger state and sends a targeted toggle to connected users", () => {
+    globalThis.canvas = {
+      tokens: { controlled: [{ id: "source-token" }, { id: "target-token" }] }
+    };
+    const notify = jest.fn();
+    const app = {
+      _audienceUserIds: new Set(["player-a", "offline-player"])
+    };
+    const runtime = {
+      emit: jest.fn(),
+      targetedFxLedger: new Map([
+        ["offline-active", ledgerEntry("offline-player")]
+      ]),
+      tokenFx: new Map([["tokenLaser", new Map()]])
+    };
+    const scoped = createAudienceRuntime(runtime, app, {
+      game: panelGame(),
+      notify
+    });
+
+    scoped.emit(buildAuthoritativeTogglePayload(panelRoot(), scoped));
+
+    expect(runtime.emit).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fx.tokenLaser.start",
+      audience: { userIds: ["player-a"] }
+    }));
+    expect(notify).toHaveBeenCalledWith(
+      "Skipped unavailable recipient: Offline Player. Sent to 1 connected recipient."
+    );
   });
 });

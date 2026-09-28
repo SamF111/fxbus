@@ -404,9 +404,18 @@
   .fxbus-panel-app .fxbus-actions > button:not(:first-child) {
     flex: 1 1 120px;
   }
+
+  .fxbus-panel-app .fxbus-actions > .fxbus-macro-split {
+    flex: 1 1 160px;
+  }
+
+  .fxbus-panel-app .fxbus-actions > .fxbus-stop-split {
+    flex: 1 1 140px;
+  }
 }
 
-.fxbus-panel-app .fxbus-apply-split {
+.fxbus-panel-app .fxbus-apply-split,
+.fxbus-panel-app .fxbus-stop-split {
   position: relative;
   display: inline-flex;
   align-items: stretch;
@@ -418,7 +427,14 @@
   border-bottom-right-radius: 0;
 }
 
-.fxbus-panel-app .fxbus-apply-split > .fxbus-audience-toggle {
+.fxbus-panel-app .fxbus-stop-split > [data-fxbus-audience-stop] {
+  min-width: 110px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.fxbus-panel-app .fxbus-apply-split > .fxbus-audience-toggle,
+.fxbus-panel-app .fxbus-stop-split > .fxbus-audience-toggle {
   min-width: 28px;
   width: 28px;
   padding: 0 6px;
@@ -427,9 +443,69 @@
   border-bottom-left-radius: 0;
 }
 
-.fxbus-panel-app .fxbus-apply-split.fxbus-targeted > button {
+.fxbus-panel-app .fxbus-apply-split.fxbus-targeted > button,
+.fxbus-panel-app .fxbus-stop-split.fxbus-targeted > button {
   border-color: var(--color-border-highlight);
   box-shadow: inset 0 -2px 0 var(--color-border-highlight);
+}
+
+.fxbus-panel-app .fxbus-macro-split {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.fxbus-panel-app .fxbus-macro-split > [data-action="fxbusCopyToMacro"] {
+  min-width: 112px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.fxbus-panel-app .fxbus-macro-split > .fxbus-macro-toggle {
+  min-width: 28px;
+  width: 28px;
+  padding: 0 6px;
+  margin-left: -1px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.fxbus-panel-app .fxbus-macro-menu {
+  position: absolute;
+  z-index: 100;
+  right: 0;
+  bottom: calc(100% + 4px);
+  display: grid;
+  min-width: 190px;
+  padding: 6px;
+  border: 1px solid #76664f;
+  border-radius: 4px;
+  background: #f4efe4;
+  color: #201b16;
+  color-scheme: light;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28);
+}
+
+.fxbus-panel-app .fxbus-macro-menu[hidden] {
+  display: none;
+}
+
+.fxbus-panel-app .fxbus-macro-option {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #201b16;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.fxbus-panel-app .fxbus-macro-option:hover,
+.fxbus-panel-app .fxbus-macro-option:focus-visible {
+  background: #e5d6bd;
 }
 
 .fxbus-panel-app .fxbus-audience-menu {

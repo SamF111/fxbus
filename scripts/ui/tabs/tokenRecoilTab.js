@@ -53,6 +53,18 @@ function getPanel(root) {
   return root.querySelector(`.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`);
 }
 
+function buildStopPayload() {
+  const tokenIds = selectedTokenIds();
+  if (tokenIds.length === 0) {
+    throw new Error("Token Recoil: no tokens selected");
+  }
+
+  return {
+    action: "fx.tokenRecoil.stop",
+    tokenIds
+  };
+}
+
 function getSelectedOrigin() {
   const token = canvas?.tokens?.controlled?.[0];
   if (!token?.center) return null;
@@ -338,6 +350,10 @@ export function tokenRecoilTabDef() {
       if (!payload.excludeTokenIds.length) delete payload.excludeTokenIds;
 
       return payload;
+    },
+
+    buildStopPayload(_root, _runtime) {
+      return buildStopPayload();
     },
 
     /**

@@ -3,6 +3,7 @@ import {
   dispatchFx,
   emitFx,
   registerFxSocket,
+  resolveOutboundFxAudienceRecipients,
   validateOutboundFxAudienceRecipients
 } from "../scripts/socket.js";
 import { observeTargetedFxMessage } from "../scripts/targetedFxLedger.js";
@@ -540,6 +541,41 @@ describe("FX Bus socket dispatch", () => {
     );
   });
 
+  test("sends to connected macro recipients while warning about unavailable ones", () => {
+    const gm = { id: "gm", name: "GM", role: 4, isGM: true, active: true };
+    const online = { id: "player-a", name: "Player A", role: 1, active: true };
+    const offline = { id: "player-b", name: "Player B", role: 1, active: false };
+    installSocketEnvironment(new Map([
+      [gm.id, gm],
+      [online.id, online],
+      [offline.id, offline]
+    ]));
+    game.user = gm;
+    game.userId = gm.id;
+    const handler = jest.fn();
+    const payload = {
+      action: "fx.screenBlur.start",
+      durationMs: 0,
+      audience: { userIds: [online.id, offline.id] }
+    };
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    emitFx(runtime(handler), payload);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(game.socket.emit).toHaveBeenCalledWith(
+      "module.fxbus",
+      expect.objectContaining({
+        action: payload.action,
+        audience: { userIds: [online.id] }
+      })
+    );
+    expect(ui.notifications.warn).toHaveBeenCalledWith(
+      "FX Bus skipped unavailable recipient for 'fx.screenBlur.start': Player B (offline). Sent to 1 connected recipient."
+    );
+    expect(payload.audience.userIds).toEqual([online.id, offline.id]);
+  });
+
   test("blocks an outbound targeted packet when a recipient was deleted", () => {
     installSocketEnvironment();
     jest.spyOn(console, "warn").mockImplementation(() => {});
@@ -552,6 +588,26 @@ describe("FX Bus socket dispatch", () => {
     expect(ui.notifications.warn).toHaveBeenCalledWith(
       "FX Bus did not send 'fx.screenShake.start': unavailable recipient: deleted-player (deleted)."
     );
+  });
+
+  test("resolves a mixed audience without mutating its reusable source payload", () => {
+    const online = { id: "online", name: "Online", active: true };
+    const offline = { id: "offline", name: "Offline", active: false };
+    installSocketEnvironment(new Map([
+      [online.id, online],
+      [offline.id, offline]
+    ]));
+    const payload = {
+      action: "fx.screenShake.start",
+      audience: { userIds: [online.id, offline.id, "deleted"] }
+    };
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    expect(resolveOutboundFxAudienceRecipients(payload)).toEqual({
+      action: payload.action,
+      audience: { userIds: [online.id] }
+    });
+    expect(payload.audience.userIds).toEqual([online.id, offline.id, "deleted"]);
   });
 
   test("emitFx rejects a malformed audience before local or socket dispatch", () => {

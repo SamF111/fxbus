@@ -56,7 +56,8 @@ import {
 } from "./panel/panelNavigation.js";
 
 import {
-  copyActiveTabApplyToClipboard
+  copyActiveTabApplyToClipboard,
+  wireMacroCopyControls
 } from "./panel/panelMacroCopy.js";
 
 import {
@@ -276,7 +277,8 @@ class FxBusGmControlPanelApp extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    wireAudienceControls(this, root, signal);
+    wireAudienceControls(this, root, signal, globalThis.game, runtime);
+    wireMacroCopyControls(this, root, runtime, signal);
 
     wireStatePersistence(root, signal);
     renderSubTabs(root, this);

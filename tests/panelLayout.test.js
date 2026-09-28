@@ -53,20 +53,17 @@ describe("FX Bus panel action layout", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 
-  test.each([
-    "tokenOscTab.hbs",
-    "tokenLaserTab.hbs",
-    "tokenBeamTab.hbs",
-    "tokenRecoilTab.hbs",
-    "tileOscTab.hbs",
-    "tileRotationTab.hbs",
-    "tileFlickerTab.hbs",
-    "tileFlowTab.hbs"
-  ])("%s presents separate Stop and Stop All actions", (fileName) => {
+  test.each(tabFiles.filter((fileName) => fileName !== "resetTab.hbs"))(
+    "%s presents separate Stop and global Stop All actions",
+    (fileName) => {
     const template = fs.readFileSync(path.join(TABS_DIR, fileName), "utf8");
 
     expect(template).toMatch(/<button[^>]*>\s*Stop\s*<\/button>/);
     expect(template).toMatch(/<button[^>]*>\s*Stop All\s*<\/button>/);
+    expect(template).toMatch(
+      /<button[^>]*data-fxbus-stop-all-action="fx\.[^"]+\.stop(?:All)?"[^>]*>\s*Stop All\s*<\/button>/
+    );
     expect(template).not.toContain("Stop Selected");
-  });
+    }
+  );
 });

@@ -104,6 +104,13 @@ export function tokenDollyZoomTabDef() {
       return buildPayload(root);
     },
 
+    buildStopPayload(_root, _runtime) {
+      return {
+        action: "fx.tokenDollyZoom.stop",
+        restore: true
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`

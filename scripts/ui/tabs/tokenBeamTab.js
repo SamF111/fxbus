@@ -436,6 +436,10 @@ export function tokenBeamTabDef() {
       return buildApplyPayload(root, "fx.tokenBeam.start");
     },
 
+    buildStopPayload(_root, _runtime) {
+      return buildStopSelectedPayload();
+    },
+
     macroName(_root) {
       return "FX Bus - Token Laser";
     },

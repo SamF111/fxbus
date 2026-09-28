@@ -37,8 +37,8 @@ import {
   dispatchFx,
   enrichFxBusPayload,
   registerFxSocket,
-  validateFxMessageAudience,
-  validateOutboundFxAudienceRecipients
+  resolveOutboundFxAudienceRecipients,
+  validateFxMessageAudience
 } from "./socket.js";
 import { registerBuiltInEffects } from "./effects/index.js";
 import { observeTargetedFxMessage } from "./targetedFxLedger.js";
@@ -282,12 +282,13 @@ function getOrCreateRuntime() {
       if (typeof action !== "string" || action.trim().length === 0) return;
 
       if (!validateFxMessageAudience(payload)) return;
-      if (!validateOutboundFxAudienceRecipients(payload)) return;
+      const outboundPayload = resolveOutboundFxAudienceRecipients(payload);
+      if (!outboundPayload) return;
 
       const t0 = performance.now();
 
       const enriched = enrichFxBusPayload({
-        ...payload,
+        ...outboundPayload,
         action
       });
 

@@ -22,8 +22,8 @@ packets:
   show the current audience, for example **Apply to Bob**.
 - Leave the recipient list empty to preserve the original **Everyone** behaviour.
 - Build targeted macros even while their recipients are offline.
-- Reject a live targeted action or saved targeted macro with a clear GM warning
-  when a required recipient is unavailable.
+- Send live targeted actions and saved targeted macros to the connected selected
+  recipients, while clearly warning the GM about any unavailable recipients.
 - Keep the GM informed through one private, periodically refreshed chat card that
   lists active targeted effects, recipients, elapsed time, and remaining duration.
 - Remove the private reminder after the final targeted effect stops, after a
@@ -120,11 +120,11 @@ https://github.com/user-attachments/assets/5fc748bb-a636-4ce2-a69e-6184ab9bf4b2
 - **GM audience model**
   The GM can apply an effect to everyone or to selected connected users. Existing
   packets and macros that omit an audience still apply to everyone. Offline world
-  users remain selectable for preparing targeted macros, while live panel actions
-  require every selected recipient to be connected. The picker updates user names
-  and online status while the panel remains open without resetting effect fields.
-  Targeted macros also stop with a GM warning if any saved recipient is offline or
-  has been deleted, rather than emitting a packet that nobody can receive. Clients
+  users remain selectable for preparing targeted macros. Live panel actions and
+  saved macros skip unavailable recipients, warn the GM, and continue to any
+  connected selected users. They send nothing when every selected recipient is
+  unavailable. The picker updates user names and online status while the panel
+  remains open without resetting effect fields. Clients
   acknowledge successfully applied targeted effects and periodically answer a
   lightweight state-sync request. The GM reconciles those replies with its private
   reminder ledger, recovering after a GM refresh and removing stale state when a
@@ -147,9 +147,16 @@ picker.
   behaviour and keeps existing macros compatible.
 - **One or more users selected:** only clients whose Foundry user IDs match the
   packet audience apply the effect.
-- **Live panel actions:** every selected recipient must currently be connected.
+- **Live panel actions:** connected selected recipients receive the effect;
+  unavailable selections are skipped with a GM warning.
 - **Macro authoring:** offline users may be selected so a GM can prepare macros
-  before a session. The generated macro validates its saved recipients when run.
+  before a session. When run, the macro sends to its connected saved recipients
+  and warns about any unavailable ones.
+- **Stop:** follows the displayed audience. Its arrow opens the same shared
+  recipient roster as Apply, so changing either picker updates both actions.
+  Token and tile stops affect only the currently selected scene objects.
+- **Stop All:** stops that effect for everyone, regardless of the displayed
+  audience. This is available on every effect tab.
 - **Reset:** always applies to everyone and does not inherit the selected audience.
 
 Audience targeting is an application filter, not a privacy or security boundary.
@@ -322,9 +329,17 @@ macro. The copied macro includes the selected audience when one is present; when
 no users are selected, it keeps the original apply-to-everyone behaviour. This
 means existing audience-less macros continue to work unchanged.
 
+The main **Copy Macro** button preserves that Apply-macro behaviour. Its arrow
+opens explicit **Copy Apply Macro**, **Copy Stop Macro**, and **Copy Stop All
+Macro** actions. Stop macros preserve the displayed audience and the currently
+selected token or tile IDs where the effect uses scene-object targeting. Stop All
+macros omit the audience and stop that effect for everyone. Tile Flow stop macros
+also preserve the selected Reset/Retain stop mode.
+
 Offline world users remain available while authoring a macro. When the macro is
-run, FX Bus checks that every saved recipient still exists and is connected before
-broadcasting the effect. Reset macros always apply globally.
+run, FX Bus broadcasts to the connected saved recipients, warns about unavailable
+ones, and sends nothing only when none of its selected recipients can receive the
+effect. Reset macros always apply globally.
 
 All macros use the unified emitter:
 

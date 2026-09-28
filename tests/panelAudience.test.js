@@ -1,12 +1,15 @@
 import { jest } from "@jest/globals";
 import {
   addAudienceToPayload,
+  buildStopAllPayload,
   closeAudienceMenus,
   createAudienceRuntime,
   formatApplyAudienceLabel,
   formatAudienceUserLabel,
   getAudienceUsers,
   getPanelAudience,
+  resolveConnectedPanelAudience,
+  wireStopAllBroadcasts,
   wireAudienceRosterRefresh
 } from "../scripts/ui/panel/panelAudience.js";
 
@@ -134,7 +137,7 @@ describe("GM panel audience targeting", () => {
     });
   });
 
-  test("blocks a selected user who disconnected instead of broadcasting", () => {
+  test("blocks when every selected recipient is unavailable instead of broadcasting", () => {
     const game = makeGame();
     game.users.get("alice").active = false;
     const emit = jest.fn();
@@ -146,9 +149,42 @@ describe("GM panel audience targeting", () => {
 
     expect(emit).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledWith(
-      "Selected recipient is no longer connected: Alice. Choose recipients again."
+      "No selected recipients are connected: Alice. Nothing was sent."
     );
     expect(() => getPanelAudience(app, game)).toThrow("Alice");
+  });
+
+  test("sends to connected recipients and warns about unavailable selections", () => {
+    const game = makeGame();
+    const emit = jest.fn();
+    const notify = jest.fn();
+    const app = { _audienceUserIds: new Set(["alice", "offline"]) };
+    const scoped = createAudienceRuntime({ emit }, app, { game, notify });
+
+    scoped.emit({ action: "fx.screenPulse.start" });
+
+    expect(emit).toHaveBeenCalledWith({
+      action: "fx.screenPulse.start",
+      audience: { userIds: ["alice"] }
+    });
+    expect(notify).toHaveBeenCalledWith(
+      "Skipped unavailable recipient: Offline. Sent to 1 connected recipient."
+    );
+    expect(app._audienceUserIds).toEqual(new Set(["alice", "offline"]));
+  });
+
+  test("resolves connected recipients without losing the intended selection", () => {
+    const app = { _audienceUserIds: new Set(["alice", "offline", "missing"]) };
+
+    expect(resolveConnectedPanelAudience(app, makeGame())).toEqual({
+      audience: { userIds: ["alice"] },
+      unavailable: [
+        { id: "offline", name: "Offline", missing: false },
+        { id: "missing", name: "missing", missing: true }
+      ],
+      targeted: true
+    });
+    expect(app._audienceUserIds).toEqual(new Set(["alice", "offline", "missing"]));
   });
 
   test("allows offline recipients while preparing a macro", () => {
@@ -181,6 +217,51 @@ describe("GM panel audience targeting", () => {
 
     expect(emit).toHaveBeenCalledWith({ action: "fx.bus.reset" });
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("builds Stop All payloads including an effect-specific stop mode", () => {
+    const panel = {
+      querySelector: jest.fn(() => ({ value: "retain" }))
+    };
+    const button = {
+      dataset: {
+        fxbusStopAllAction: "fx.tileFlow.stop",
+        fxbusStopAllStopMode: "tileFlowStopMode"
+      },
+      closest: jest.fn(() => panel)
+    };
+
+    expect(buildStopAllPayload(button)).toEqual({
+      action: "fx.tileFlow.stop",
+      stopMode: "retain"
+    });
+  });
+
+  test("Stop All uses the raw runtime and bypasses the selected audience", () => {
+    let captureListener;
+    const root = {
+      addEventListener: jest.fn((type, listener, options) => {
+        if (type === "click" && options?.capture) captureListener = listener;
+      })
+    };
+    const emit = jest.fn();
+    const button = {
+      dataset: { fxbusStopAllAction: "fx.screenRotate.stop" },
+      closest: jest.fn(() => null)
+    };
+    const event = {
+      target: { closest: jest.fn(() => button) },
+      preventDefault: jest.fn(),
+      stopImmediatePropagation: jest.fn()
+    };
+
+    wireStopAllBroadcasts(root, { emit }, new AbortController().signal);
+    captureListener(event);
+
+    expect(event.preventDefault).toHaveBeenCalledTimes(1);
+    expect(event.stopImmediatePropagation).toHaveBeenCalledTimes(1);
+    expect(emit).toHaveBeenCalledWith({ action: "fx.screenRotate.stop" });
+    expect(emit.mock.calls[0][0]).not.toHaveProperty("audience");
   });
 
   test("refreshes for user lifecycle changes and removes hooks on abort", () => {

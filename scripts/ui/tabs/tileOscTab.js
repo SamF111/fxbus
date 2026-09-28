@@ -221,6 +221,18 @@ export function tileOscTabDef() {
       return buildPayload(root, runtime);
     },
 
+    buildStopPayload() {
+      const tileIds = selectedTileIds();
+      if (tileIds.length === 0) {
+        throw new Error("Tile Oscillation: no tiles selected");
+      }
+
+      return {
+        action: ACTION_STOP,
+        tileIds
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`

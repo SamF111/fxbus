@@ -158,6 +158,18 @@ export function tokenOscTabDef() {
       return buildPayload(root, runtime);
     },
 
+    buildStopPayload() {
+      const tokenIds = selectedTokenIds();
+      if (tokenIds.length === 0) {
+        throw new Error("Token Oscillation: no tokens selected");
+      }
+
+      return {
+        action: "fx.tokenOsc.stop",
+        tokenIds
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`

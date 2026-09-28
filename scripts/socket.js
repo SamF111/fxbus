@@ -299,7 +299,7 @@ export function validateFxMessageAudience(message) {
   }
 }
 
-function warnUnavailableAudienceRecipients(message, unavailable) {
+function warnUnavailableAudienceRecipients(message, unavailable, connectedCount = 0) {
   const action =
     typeof message?.action === "string" && message.action.trim().length
       ? message.action
@@ -308,33 +308,50 @@ function warnUnavailableAudienceRecipients(message, unavailable) {
     reason === "deleted" ? `${id} (deleted)` : `${name || id} (offline)`
   );
 
-  console.warn("[FX Bus] targeted emit blocked for unavailable recipients", {
-    action,
-    unavailable
-  });
+  const partiallySent = connectedCount > 0;
+
+  console.warn(
+    partiallySent
+      ? "[FX Bus] targeted emit skipped unavailable recipients"
+      : "[FX Bus] targeted emit blocked for unavailable recipients",
+    {
+      action,
+      unavailable,
+      connectedCount
+    }
+  );
+
+  if (partiallySent) {
+    const unavailableLabel = details.length === 1 ? "recipient" : "recipients";
+    const connectedLabel = connectedCount === 1 ? "recipient" : "recipients";
+
+    globalThis.ui?.notifications?.warn?.(
+      `FX Bus skipped unavailable ${unavailableLabel} for '${action}': ${details.join(", ")}. ` +
+      `Sent to ${connectedCount} connected ${connectedLabel}.`
+    );
+    return;
+  }
 
   globalThis.ui?.notifications?.warn?.(
     `FX Bus did not send '${action}': unavailable recipient${details.length === 1 ? "" : "s"}: ${details.join(", ")}.`
   );
 }
 
-export function validateOutboundFxAudienceRecipients(message) {
+export function resolveOutboundFxAudienceRecipients(message) {
   /**
-   * Block targeted outbound packets when any selected world user cannot receive
-   * them. This runs only on the emitting client; receivers still match their own
-   * user id normally.
+   * Resolve the deliverable audience for an outbound packet.
    *
-   * Compatibility contract:
-   * - Global Reset always emits.
-   * - Omitted or empty audiences still mean Everyone.
-   * - Existing targeted macros become usable again as soon as all recipients
-   *   reconnect.
+   * A mixed online/offline audience is narrowed to its connected recipients so
+   * one unavailable user cannot block everyone else. The source message is
+   * never mutated; this matters for saved macros which may be run again after a
+   * recipient reconnects.
    */
-  if (message?.action === ACTION_GLOBAL_RESET) return true;
+  if (message?.action === ACTION_GLOBAL_RESET) return message;
 
   const { userIds } = normalizeFxAudience(message?.audience);
-  if (userIds.length === 0) return true;
+  if (userIds.length === 0) return message;
 
+  const connectedUserIds = [];
   const unavailable = [];
 
   for (const userId of userIds) {
@@ -348,13 +365,38 @@ export function validateOutboundFxAudienceRecipients(message) {
         name: String(user.name ?? userId),
         reason: "offline"
       });
+    } else {
+      connectedUserIds.push(userId);
     }
   }
 
-  if (unavailable.length === 0) return true;
+  if (unavailable.length === 0) return message;
 
-  warnUnavailableAudienceRecipients(message, unavailable);
-  return false;
+  warnUnavailableAudienceRecipients(message, unavailable, connectedUserIds.length);
+  if (connectedUserIds.length === 0) return null;
+
+  return {
+    ...message,
+    audience: {
+      ...message.audience,
+      userIds: connectedUserIds
+    }
+  };
+}
+
+export function validateOutboundFxAudienceRecipients(message) {
+  /**
+   * Compatibility boolean for callers which only need to know whether at least
+   * one selected recipient can receive the packet. New emission paths use
+   * resolveOutboundFxAudienceRecipients() so mixed audiences are also narrowed
+   * before broadcast.
+   *
+   * Compatibility contract:
+   * - Global Reset always emits.
+   * - Omitted or empty audiences still mean Everyone.
+   * - A targeted packet is blocked only when none of its recipients is online.
+   */
+  return resolveOutboundFxAudienceRecipients(message) !== null;
 }
 
 export function shouldApplyFxMessage(message) {
@@ -472,11 +514,12 @@ export function emitFx(runtime, payload) {
   }
 
   if (!validateFxMessageAudience(payload)) return;
-  if (!validateOutboundFxAudienceRecipients(payload)) return;
+  const outboundPayload = resolveOutboundFxAudienceRecipients(payload);
+  if (!outboundPayload) return;
 
   // Older runtime shapes may not expose emit(). Preserve their helper contract
   // while supplying the provenance now required by the receiver trust gate.
-  const enriched = enrichFxBusPayload(payload);
+  const enriched = enrichFxBusPayload(outboundPayload);
 
   observeTargetedFxMessage(runtime, enriched);
   void clearTargetedFxReminderIfInactive(runtime);

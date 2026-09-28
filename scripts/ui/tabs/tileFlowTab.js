@@ -201,6 +201,21 @@ export function tileFlowTabDef() {
       return buildPayload(panel, tileIds);
     },
 
+    buildStopPayload(root, _runtime) {
+      const panel = root.querySelector(
+        `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
+      );
+      if (!panel) throw new Error("Tile Flow: panel not found");
+
+      return {
+        action: "fx.tileFlow.stop",
+        tileIds: getSelectedTileIdsOrThrow(),
+        stopMode: normaliseStopMode(
+          selectValue(panel, "tileFlowStopMode", "reset")
+        )
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`

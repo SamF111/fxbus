@@ -322,6 +322,10 @@ export function tileRotationTabDef() {
       return buildApplyPayload(root, "fx.tileRotation.start");
     },
 
+    buildStopPayload(_root, _runtime) {
+      return buildStopSelectedPayload();
+    },
+
     macroName(_root) {
       return "FX Bus - Tile Rotation";
     },

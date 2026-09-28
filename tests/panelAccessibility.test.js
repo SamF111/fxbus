@@ -8,6 +8,14 @@ const stylesheet = readFileSync(
   new URL("../styles/fxbus.css", import.meta.url),
   "utf8"
 );
+const macroCopySource = readFileSync(
+  new URL("../scripts/ui/panel/panelMacroCopy.js", import.meta.url),
+  "utf8"
+);
+const audienceSource = readFileSync(
+  new URL("../scripts/ui/panel/panelAudience.js", import.meta.url),
+  "utf8"
+);
 
 describe("FX Bus panel accessibility markup", () => {
   test("category and effect navigation use keyboard-focusable tab buttons", () => {
@@ -41,5 +49,27 @@ describe("FX Bus panel accessibility markup", () => {
     expect(template).toContain('data-fxbus-apply-help');
     expect(stylesheet).toContain('container-name: fxbus-main');
     expect(stylesheet).toContain('@container fxbus-main (max-width: 480px)');
+  });
+
+  test("macro split menu exposes labelled keyboard-focusable actions", () => {
+    expect(macroCopySource).toContain('toggle.setAttribute("aria-haspopup", "menu")');
+    expect(macroCopySource).toContain('button.setAttribute("role", "menuitem")');
+    expect(macroCopySource).toContain('"Copy Apply Macro"');
+    expect(macroCopySource).toContain('"Copy Stop Macro"');
+    expect(macroCopySource).toContain('"Copy Stop All Macro"');
+    expect(macroCopySource).toContain('["ArrowDown", "ArrowUp", "Home", "End"]');
+    expect(macroCopySource).toContain('if (event.key !== "Escape") return');
+
+    const menuRule = stylesheet.match(/\.fxbus-panel-app \.fxbus-macro-menu \{([\s\S]*?)\n\}/)?.[1];
+    expect(menuRule).toContain("background: #f4efe4");
+    expect(menuRule).toContain("color: #201b16");
+    expect(menuRule).toContain("color-scheme: light");
+  });
+
+  test("Stop exposes the shared audience picker without changing Stop All", () => {
+    expect(audienceSource).toContain('stopWrapper.className = "fxbus-stop-split"');
+    expect(audienceSource).toContain('"Choose FX Stop recipients"');
+    expect(audienceSource).toContain('"Stop effect for"');
+    expect(stylesheet).toContain(".fxbus-panel-app .fxbus-stop-split");
   });
 });
