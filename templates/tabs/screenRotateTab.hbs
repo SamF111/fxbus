@@ -1,5 +1,7 @@
 {{!-- D:\FoundryVTT\Data\modules\fxbus\templates\tabs\screenRotateTab.hbs --}}
 
+<div class="fxbus-fields">
+
 <p class="fxbus-muted">
   Visual-only canvas roll. Use for disorientation, ship movement, impacts, dream logic, unstable rooms, or cinematic scene shifts.
 </p>
@@ -25,7 +27,7 @@
       type="number"
       name="rotateDurationMs"
       value="2500"
-      step="50"
+      step="1"
       min="1"
       max="60000"
     />
@@ -50,7 +52,7 @@
       type="number"
       name="rotateFreqHz"
       value="0.7"
-      step="0.1"
+      step="0.01"
       min="0.01"
       max="30"
     />
@@ -70,8 +72,11 @@
 
 <hr class="fxbus-divider"/>
 
-<div class="fxbus-row">
+</div>
+
+<div class="fxbus-row fxbus-actions">
   <button type="button" class="fxbus-do" data-action="rotateStart">Apply</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="rotateStop">Stop</button>
+  <button type="button" class="fxbus-do fxbus-smallbtn" data-fxbus-stop-all-action="fx.screenRotate.stop">Stop All</button>
   <button type="button" class="fxbus-do fxbus-smallbtn" data-action="fxbusCopyToMacro">Copy to Macro</button>
 </div>

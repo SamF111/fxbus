@@ -7,7 +7,8 @@
  * Design:
  * - Exactly one canvas.app.ticker callback per effect type.
  * - If an effect is re-started/updated, its ticker callback is replaced to avoid stale closures.
- * - Any uncaught error inside an effect tick forcibly removes that effect ticker to prevent lock states.
+ * - Any uncaught error inside an effect tick removes that effect ticker and
+ *   runs the existing reset handler locally to restore visual state.
  * - Delta time derived from ticker.deltaMS for consistent motion.
  */
 
@@ -16,6 +17,30 @@ function getTicker() {
     throw new Error("[FX Bus] canvas.app.ticker unavailable.");
   }
   return canvas.app.ticker;
+}
+
+function resetAfterTickerFailure(runtime, effectName, originalError) {
+  /**
+   * Recover from partially applied transforms or overlays after a tick throws.
+   *
+   * Calling the handler directly is intentionally local-only. A rendering
+   * problem on one client must never broadcast a reset to other clients.
+   */
+  const reset = runtime?.handlers?.get?.("fx.bus.reset");
+  if (typeof reset !== "function") return;
+
+  try {
+    reset({
+      action: "fx.bus.reset",
+      reason: "tickerError",
+      effectName
+    });
+  } catch (resetError) {
+    console.error(
+      `[FX Bus] ${effectName} ticker recovery reset failed.`,
+      { originalError, resetError }
+    );
+  }
 }
 
 /**
@@ -51,8 +76,9 @@ export function ensureTicker(runtime, effectName, tickFn) {
     try {
       tickFn(deltaMS);
     } catch (err) {
-      console.error(`[FX Bus] ${effectName} tick failed; disabling ticker to prevent lock-up.`, err);
+      console.error(`[FX Bus] ${effectName} tick failed; resetting local FX.`, err);
       cleanupTicker(runtime, effectName);
+      resetAfterTickerFailure(runtime, effectName, err);
     }
   };
 

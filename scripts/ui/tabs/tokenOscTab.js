@@ -158,6 +158,18 @@ export function tokenOscTabDef() {
       return buildPayload(root, runtime);
     },
 
+    buildStopPayload() {
+      const tokenIds = selectedTokenIds();
+      if (tokenIds.length === 0) {
+        throw new Error("Token Oscillation: no tokens selected");
+      }
+
+      return {
+        action: "fx.tokenOsc.stop",
+        tokenIds
+      };
+    },
+
     wire(root, runtime, signal) {
       const panel = root.querySelector(
         `.tab[data-group="fxbus"][data-tab="${TAB_ID}"]`
@@ -196,6 +208,10 @@ export function tokenOscTabDef() {
         });
       };
 
+      const stopAll = () => {
+        runtime.emit({ action: "fx.tokenOsc.stopAll" });
+      };
+
       const apply = () => {
         try {
           runtime.emit(buildPayload(root, runtime));
@@ -212,6 +228,17 @@ export function tokenOscTabDef() {
           (event) => {
             event.preventDefault();
             stop();
+          },
+          { signal }
+        );
+
+      panel
+        .querySelector('button[type="button"][data-do="oscStopAll"]')
+        ?.addEventListener(
+          "click",
+          (event) => {
+            event.preventDefault();
+            stopAll();
           },
           { signal }
         );

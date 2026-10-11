@@ -76,13 +76,15 @@ function buildHeaderCommentLines({
  *
  * Compatibility:
  * - socketNamespace and forceSocket are retained for compatibility with older
- *   call sites, but runtime emission remains the recommended path.
+ *   call sites.
+ * - forceSocket is deprecated and intentionally uses runtime emission. Direct
+ *   socket macros cannot perform safe local dispatch or trusted attribution.
  *
  * @param {string} macroName - Human-friendly macro name for header comments.
  * @param {object} payload - Payload to emit via the FX Bus runtime.
  * @param {object} options
- * @param {string} [options.socketNamespace] - Used only when forceSocket=true.
- * @param {boolean} [options.forceSocket] - If true, emit to socket directly instead of runtime.
+ * @param {string} [options.socketNamespace] - Deprecated compatibility option.
+ * @param {boolean} [options.forceSocket] - Deprecated compatibility option.
  * @param {object} [options.meta]
  * @param {string} [options.meta.generatedAt] - ISO string timestamp.
  * @param {string} [options.meta.generatedBy] - User name.
@@ -106,18 +108,14 @@ export function fxbusBuildMacroSource(
 
   const payloadJson = JSON.stringify(payload, null, 2);
 
-  const runtimeGuard = forceSocket
-    ? ""
-    : `if (!globalThis.fxbus?.emit) {
+  const runtimeGuard = `if (!globalThis.fxbus?.emit) {
   ui.notifications?.error?.("FX Bus runtime not available.");
   throw new Error("FX Bus runtime not available.");
 }
 
 `;
 
-  const emitLine = forceSocket
-    ? `game.socket.emit(${JSON.stringify(String(socketNamespace))}, payload);`
-    : "globalThis.fxbus.emit(payload);";
+  const emitLine = "globalThis.fxbus.emit(payload);";
 
   const header = buildHeaderCommentLines({
     macroName: safeName,
